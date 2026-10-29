@@ -1,0 +1,149 @@
+Looking in links: /tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/wheelhouse
+Processing ./wheelhouse/contourpy-1.3.2-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+Processing ./wheelhouse/cycler-0.12.1-py3-none-any.whl
+Processing ./wheelhouse/exceptiongroup-1.3.1-py3-none-any.whl
+Processing ./wheelhouse/fastlio2-0.1.0-cp310-cp310-linux_aarch64.whl
+Processing ./wheelhouse/fonttools-4.64.0-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
+Processing ./wheelhouse/gtsam-4.2.2-cp310-cp310-linux_aarch64.whl
+Processing ./wheelhouse/iniconfig-2.3.0-py3-none-any.whl
+Processing ./wheelhouse/kiwisolver-1.5.1-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl
+Processing ./wheelhouse/matplotlib-3.10.9-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
+Processing ./wheelhouse/numpy-1.26.4-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+Processing ./wheelhouse/packaging-25.0-py3-none-any.whl
+Processing ./wheelhouse/pillow-12.3.0-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl
+Processing ./wheelhouse/pluggy-1.6.0-py3-none-any.whl
+Processing ./wheelhouse/pybind11-3.1.0-py3-none-any.whl
+Processing ./wheelhouse/pygicp-0.0.1+mapping.1-cp310-cp310-linux_aarch64.whl
+Processing ./wheelhouse/pygments-2.21.0-py3-none-any.whl
+Processing ./wheelhouse/pyparsing-3.3.2-py3-none-any.whl
+Processing ./wheelhouse/pytest-9.1.1-py3-none-any.whl
+Processing ./wheelhouse/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+Processing ./wheelhouse/pyyaml-6.0.3-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
+Processing ./wheelhouse/robot_mapping-0.3.1-py3-none-any.whl
+Processing ./wheelhouse/robot_mapping_gdk-0.1.0-py3-none-any.whl
+Processing ./wheelhouse/scipy-1.15.3-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+Processing ./wheelhouse/setuptools-80.10.2-py3-none-any.whl
+Processing ./wheelhouse/six-1.17.0-py2.py3-none-any.whl
+Processing ./wheelhouse/tomli-2.4.1-py3-none-any.whl
+Processing ./wheelhouse/typing_extensions-4.16.0-py3-none-any.whl
+Processing ./wheelhouse/wheel-0.48.0-py3-none-any.whl
+Installing collected packages: typing_extensions, tomli, six, setuptools, PyYAML, pyparsing, Pygments, pybind11, pluggy, pillow, packaging, numpy, kiwisolver, iniconfig, fonttools, cycler, wheel, scipy, robot-mapping, python-dateutil, pygicp, gtsam, fastlio2, exceptiongroup, contourpy, robot-mapping-gdk, pytest, matplotlib
+  Attempting uninstall: setuptools
+    Found existing installation: setuptools 59.6.0
+    Uninstalling setuptools-59.6.0:
+      Successfully uninstalled setuptools-59.6.0
+Successfully installed PyYAML-6.0.3 Pygments-2.21.0 contourpy-1.3.2 cycler-0.12.1 exceptiongroup-1.3.1 fastlio2-0.1.0 fonttools-4.64.0 gtsam-4.2.2 iniconfig-2.3.0 kiwisolver-1.5.1 matplotlib-3.10.9 numpy-1.26.4 packaging-25.0 pillow-12.3.0 pluggy-1.6.0 pybind11-3.1.0 pygicp-0.0.1+mapping.1 pyparsing-3.3.2 pytest-9.1.1 python-dateutil-2.9.0.post0 robot-mapping-0.3.1 robot-mapping-gdk-0.1.0 scipy-1.15.3 setuptools-80.10.2 six-1.17.0 tomli-2.4.1 typing_extensions-4.16.0 wheel-0.48.0
+No broken requirements found.
+{
+  "robot_mapping": "0.3.1",
+  "python": "3.10.12",
+  "machine": "aarch64",
+  "hardware_accessed": false,
+  "installed": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "gtsam": "4.2.2",
+    "Pillow": "12.3.0",
+    "matplotlib": "3.10.9",
+    "fastlio2": "0.1.0"
+  },
+  "fastlio2_scan_export": true,
+  "gtsam": true,
+  "patched_vgicp": true,
+  "loop_smoke_mse_m2": 2.579341558390051e-06,
+  "loop_smoke": true
+}
+{
+  "runtime": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv",
+  "imports": {
+    "robot_mapping": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/robot_mapping/__init__.py",
+    "fastlio2": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/fastlio2/__init__.py",
+    "pygicp": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/pygicp.cpython-310-aarch64-linux-gnu.so",
+    "gtsam": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/gtsam/__init__.py",
+    "numpy": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/numpy/__init__.py",
+    "scipy": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/scipy/__init__.py",
+    "matplotlib": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/matplotlib/__init__.py",
+    "PIL": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/PIL/__init__.py",
+    "yaml": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/yaml/__init__.py"
+  },
+  "native_execution": "PASS",
+  "loaded_libraries": "inside runtime",
+  "hardware_accessed": false
+}
+Mapping runtime ready: /tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv
+
+No broken requirements found.
+{
+  "robot_mapping": "0.3.1",
+  "python": "3.10.12",
+  "machine": "aarch64",
+  "hardware_accessed": false,
+  "installed": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "gtsam": "4.2.2",
+    "Pillow": "12.3.0",
+    "matplotlib": "3.10.9",
+    "fastlio2": "0.1.0"
+  },
+  "fastlio2_scan_export": true,
+  "gtsam": true,
+  "patched_vgicp": true,
+  "loop_smoke_mse_m2": 2.579341558390051e-06,
+  "loop_smoke": true
+}
+{
+  "runtime": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv",
+  "imports": {
+    "robot_mapping": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/robot_mapping/__init__.py",
+    "fastlio2": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/fastlio2/__init__.py",
+    "pygicp": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/pygicp.cpython-310-aarch64-linux-gnu.so",
+    "gtsam": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/gtsam/__init__.py",
+    "numpy": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/numpy/__init__.py",
+    "scipy": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/scipy/__init__.py",
+    "matplotlib": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/matplotlib/__init__.py",
+    "PIL": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/PIL/__init__.py",
+    "yaml": "/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv/lib/python3.10/site-packages/yaml/__init__.py"
+  },
+  "native_execution": "PASS",
+  "loaded_libraries": "inside runtime",
+  "hardware_accessed": false
+}
+Mapping runtime already installed and verified: /tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/.venv
+
+{
+  "robot_mapping": "0.3.1",
+  "python": "3.10.12",
+  "machine": "aarch64",
+  "hardware_accessed": false,
+  "installed": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "gtsam": "4.2.2",
+    "Pillow": "12.3.0",
+    "matplotlib": "3.10.9",
+    "fastlio2": "0.1.0"
+  },
+  "fastlio2_scan_export": true,
+  "gtsam": true,
+  "patched_vgicp": true,
+  "loop_smoke_mse_m2": 2.579341558390051e-06,
+  "loop_smoke": true
+}
+
+Configuration written: config.json; verify calibration and robot model before use
+等待传感器数据就绪 (0.0s)...
+开始建图 lidar=front imu=front blind=0.50 cube=1000 det=70 filter_map=0.15 filter_surf=0.15 body_filter=off mode=urdf urdf=/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime padding=0.100m
+[warmup] frame=0, ts=100.100000000, handle_ms=1.2, imu=1, scan_dt=0.100, dropped=0, body_rm=0, back_n=0, matched=0, map=0, res=0.000000, status=initializing, keyframe=0, phase=mapping, kf=0, voxels=0, occ=0, ingest_ms=0.0, loops=0
+地图重力对齐完成，初始 up=[0.0, 0.0, 1.0]
+[mapping] 地图已保存: /tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/maps/20261029_134655_196555/map_0000
+等待传感器数据就绪 (0.0s)...
+开始建图 lidar=front imu=front blind=0.50 cube=1000 det=70 filter_map=0.15 filter_surf=0.15 body_filter=off mode=urdf urdf=/tmp/mapping-restore-ar9h15ik/robot-mapping-runtime padding=0.100m
+[warmup] frame=0, ts=100.100000000, handle_ms=0.6, imu=1, scan_dt=0.100, dropped=0, body_rm=0, back_n=0, matched=0, map=0, res=0.000000, status=initializing, keyframe=0, phase=mapping, kf=0, voxels=0, occ=0, ingest_ms=0.0, loops=0
+地图重力对齐完成，初始 up=[0.0, 0.0, 1.0]
+[mapping] 地图已保存: /tmp/mapping-restore-ar9h15ik/robot-mapping-runtime/maps/20261029_134700_925985/map_0000
+PASS: native session, recording, replay and complete save from restored archive
+Multi thread started 
+Multi thread started 
+Rebuild thread terminated normally
+Rebuild thread terminated normally

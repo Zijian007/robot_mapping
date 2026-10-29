@@ -1,0 +1,13 @@
+{
+  "archive": "/home/agi/robot_mapping/dist/robot-mapping-runtime-cp310-linux_aarch64.tar.gz",
+  "sha256": "8ddf34b7ceee4e2b16ac44cefa98520ec0f2c005ed7f57ce81a064cab82c8ff1",
+  "python": "/usr/bin/python3.10",
+  "hardware_accessed": false,
+  "restore": "PASS",
+  "repeated_install": "PASS",
+  "native_execution": "PASS",
+  "native_record_replay_save": "PASS",
+  "source_tree_required": false,
+  "shared_environment_required": false,
+  "network_required": false
+}

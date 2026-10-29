@@ -1,0 +1,11 @@
+{
+  "version": "0.3.2",
+  "gdk_version": "0.1.1",
+  "core_and_gdk_tests_passed": 86,
+  "legacy_mapping_tests_passed": 72,
+  "source_matches_install": true,
+  "native_runtime": "PASS",
+  "restore_report": "runtime-restore-0.3.2-20261029.json",
+  "hardware_accessed": false,
+  "rollback": "/data/robot_mapping-backups/20261029-pre-0.3.2"
+}

@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "date": "2026-10-29",
+  "core_version": "0.3.0",
+  "gdk_adapter_version": "0.1.0",
+  "core_tests": "75 passed",
+  "shared_tests": "68 passed, 7 skipped",
+  "adapter_tests": "3 passed",
+  "core_wheel_sdk_blocked_native_replay": "PASS",
+  "two_wheel_optional_plugin_sdk_blocked": "PASS",
+  "hardware_accessed": false,
+  "artifacts": [
+    {
+      "file": "robot_mapping/dist/robot_mapping-0.3.0-py3-none-any.whl",
+      "sha256": "893038bd44083cb6be354a96cacde0e20a40e361c08917028d6f9e5fcf64a3d9"
+    },
+    {
+      "file": "robot_mapping_gdk/dist/robot_mapping_gdk-0.1.0-py3-none-any.whl",
+      "sha256": "a41af0e3083a63fd78863f9fefb938857da75e377949d780b5374d71f8a977a4"
+    }
+  ],
+  "legacy_tests": "71 passed",
+  "native_doctor": "PASS: FAST-LIO2, GTSAM and patched VGICP"
+}

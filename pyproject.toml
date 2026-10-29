@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robot-mapping"
+version = "0.4.0"
+description = "LiDAR mapping algorithm: LIO, loop closure and occupancy grid"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26.4,<3"]
+
+[project.optional-dependencies]
+loop = ["numpy==1.26.4", "scipy>=1.10,<1.16", "gtsam==4.2.2"]
+export = ["matplotlib>=3.7,<4"]
+preview = ["Pillow>=10"]
+test = ["pytest>=8"]
+runtime = ["PyYAML>=6,<7", "Pillow>=10", "matplotlib>=3.7,<4"]
+
+[project.scripts]
+robot-mapping = "robot_mapping.cli:entrypoint"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"robot_mapping.resources" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

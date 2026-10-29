@@ -1,0 +1,79 @@
+{
+  "lio": {
+    "lidar": "front",
+    "imu": "front",
+    "lidar_ready": 0.0,
+    "cube_side_length": 1000.0,
+    "det_range": 70.0,
+    "filter_size_map": 0.15,
+    "filter_size_surf": 0.15,
+    "blind": 0.5,
+    "print_interval": 1.0,
+    "max_back_dt": 0.01,
+    "wait_imu_s": 0.35,
+    "min_imu_samples": 8,
+    "max_scan_duration": 0.12,
+    "max_lidar_frame_gap": 1.0,
+    "warmup_frames": 3,
+    "match_distance": 2.0,
+    "match_iterations": 3,
+    "plane_fit_mode": "pca",
+    "time_source": "header",
+    "require_imu": true
+  },
+  "body_filter": {
+    "enabled": false,
+    "mode": "urdf",
+    "urdf_file": "",
+    "package_path": "",
+    "collision_threshold": 0.1,
+    "tf_timeout_s": 1.0,
+    "front": {
+      "min_x": -0.7,
+      "max_x": 0.7,
+      "min_y": -0.35,
+      "max_y": 0.55,
+      "min_z": -0.5,
+      "max_z": 2.0
+    },
+    "back": {
+      "min_x": -0.7,
+      "max_x": 0.7,
+      "min_y": -0.35,
+      "max_y": 0.55,
+      "min_z": -0.5,
+      "max_z": 2.0
+    }
+  },
+  "grid": {
+    "resolution": 0.05,
+    "min_height": -0.25,
+    "max_height": 1.8,
+    "margin_cells": 5
+  },
+  "online": {
+    "keyframe_dist_th": 0.5,
+    "keyframe_angle_th": 0.2,
+    "voxel_resolution": 0.15,
+    "free_radius_m": 0.35,
+    "map_point_stride": 1,
+    "live_png": true,
+    "live_http_port": 0,
+    "live_refresh_hz": 2.0,
+    "loop": {
+      "enabled": false,
+      "search_radius_m": 8.0,
+      "min_keyframe_gap": 30,
+      "neighbor_keyframes": 2,
+      "max_correction_m": 2.0,
+      "max_correction_rad": 0.6,
+      "min_inlier_ratio": 0.4,
+      "max_rmse_m": 0.3,
+      "vgicp_resolution": 0.5,
+      "vgicp_max_correspondence_distance": 1.0,
+      "vgicp_num_threads": 2,
+      "odom_sigmas": [0.05, 0.05, 0.05, 0.02, 0.02, 0.02],
+      "loop_sigmas": [0.1, 0.1, 0.1, 0.05, 0.05, 0.05]
+    }
+  }
+}

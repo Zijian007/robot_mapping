@@ -1,0 +1,10 @@
+{
+  "robot": {
+    "lidar_to_base": {},
+    "imu_from_lidar": null,
+    "imu_frame_id": ""
+  },
+  "source": {
+    "clock_id": "sensor"
+  }
+}

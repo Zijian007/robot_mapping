@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-29",
+  "removed_build_intermediates": [
+    "/home/agi/move_odom/tools/mapping/.third_party/build",
+    "/home/agi/fastlio2/build/temp.linux-aarch64-cpython-310"
+  ],
+  "robot_mapping_tests_passed": 79,
+  "move_odom_mapping_tests_passed": 72,
+  "isolated_native_runtime": "PASS",
+  "shared_numpy": "2.2.6",
+  "restore_report": "runtime-restore-takeover-20261029.json",
+  "hardware_accessed": false,
+  "remaining": "New acquisition chain and actual map quality require hardware acceptance."
+}

@@ -1,0 +1,12 @@
+{
+  "removed_unused_servers": [
+    "/home/agi/.vscode-server/cli/servers/Stable-04c0d99f4fb0d8afe6ce4f0c58e31e183ac3e4b1",
+    "/home/agi/.vscode-server/cli/servers/Stable-07f806f999227108933c2e30515b26eecc1fda74",
+    "/home/agi/.vscode-server/cli/servers/Stable-16507d91be0dc1ce4f94c04d4d0430210b8685d9",
+    "/home/agi/.vscode-server/cli/servers/Stable-2d0b7506a36c1d6db9a466440131a8e01eab2289",
+    "/home/agi/.vscode-server/cli/servers/Stable-6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1",
+    "/home/agi/.vscode-server/cli/servers/Stable-7debcd0e2acdea1c52de81bf9ee1620444407dda"
+  ],
+  "cleared_cache": "/home/agi/.vscode-server/data/CachedExtensionVSIXs",
+  "active_servers_preserved": true
+}

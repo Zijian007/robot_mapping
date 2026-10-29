@@ -1,0 +1,15 @@
+{
+  "mapping_version": "0.3.5",
+  "gdk_version": "0.1.3",
+  "shared_sensor_package_removed": true,
+  "navigation_tests_passed": 84,
+  "navigation_tests_skipped": 1,
+  "skip_reason": "optional Open3D unavailable",
+  "mapping_gdk_tests_passed": 88,
+  "shared_environment_original_versions_restored": true,
+  "source_matches_install": true,
+  "mutual_project_dependencies": false,
+  "restore": "PASS",
+  "hardware_accessed": false,
+  "historical_maps_retained": true
+}

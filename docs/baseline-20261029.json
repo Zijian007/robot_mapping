@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-29",
+  "scope": "M0 baseline before package extraction; no hardware accessed",
+  "move_odom_commit": "7b124677a22c5c225eecf42f0cc4088acb573190",
+  "move_odom_status": "",
+  "fastlio2_commit": "bb569136086759cb3ec15089cfa914bdf205b4d5",
+  "fastlio2_status": " M README.md\n M csrc/bindings.cpp\n M csrc/include/fastlio2/native_backend.hpp\n?? tests/test_scan_export.py\n",
+  "python": "3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]",
+  "platform": "Linux-5.10.220-rt112-aarch64-with-glibc2.35",
+  "machine": "aarch64",
+  "shared_packages": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "Pillow": "12.3.0",
+    "PyYAML": "6.0.3",
+    "setuptools": "80.10.2",
+    "wheel": "0.48.0",
+    "pytest": "9.1.1"
+  },
+  "verified_mapping_runtime": {
+    "numpy": "1.26.4",
+    "gtsam": "4.2.2",
+    "fast_gicp_commit": "0e7ec1441c99f7be453db2ea216d5de029387417",
+    "scan_body_points": true
+  },
+  "regression": {
+    "command": "bash tools/mapping/scripts/run_tests.sh",
+    "result": "71 passed in 5.64s",
+    "native_smoke": "PASS",
+    "shared_environment_unchanged": true
+  },
+  "sha256": {
+    "/home/agi/fastlio2/csrc/bindings.cpp": "3a27e57188571746e55b998fab31d47e05f09c5440e6de143da8eb68a8fe08f9",
+    "/home/agi/fastlio2/csrc/include/fastlio2/native_backend.hpp": "e144a9535dd5b20c3f05d06344bd80a8e914fd4b39b9cfe6bc57ecf548e17c4d",
+    "/home/agi/move_odom/tests/test_mapping_body_filter.py": "f60f7ca0e1419571cb967ba12062b8ea0ed2f74ae4241364ecca64231eefb704",
+    "/home/agi/move_odom/tests/test_mapping_loop_safety.py": "7426b2a4f0fe3fece50e5e6b9f7cc9faf6189e8f3b41943663b4673ae8936032",
+    "/home/agi/move_odom/tests/test_mapping_projection.py": "aee37328c67d773487057a5223c461949c4a1fda627c76da1a159dd15a2294c0",
+    "/home/agi/move_odom/tests/test_mapping_tool.py": "11fd1dab8352500a139a6d566e096edd391493be4a8fe9eb25c400c6e243e3a2",
+    "/home/agi/move_odom/tools/mapping/mapping/__init__.py": "4e222fd1eaec8b63e90bfd80a20ea8ae4f731259a138947b19b35f1c14adb545",
+    "/home/agi/move_odom/tools/mapping/mapping/__main__.py": "2cb6eb382bf172a2585bba66967c7beb0bb0170836dda351ee89880460bee517",
+    "/home/agi/move_odom/tools/mapping/mapping/body_filter.py": "a58b7da660b6e4501bd0aa486066ba6a564f3a36200d1420093f8771391a6283",
+    "/home/agi/move_odom/tools/mapping/mapping/cli.py": "4f152afd3328002cdd6636be916abc0fc1a3d4c63762fc8f1bcc6f1e8d512b3f",
+    "/home/agi/move_odom/tools/mapping/mapping/hal.py": "64e4d1fa6d69c2d8f2b4be05774a19cb6368c6e810e6a1a0a03adf4794a2797d",
+    "/home/agi/move_odom/tools/mapping/mapping/keyboard.py": "1da2060bbcd63668b9ef8f82fd561124170b518c5274a4cec7e23b8b6a8d2f2a",
+    "/home/agi/move_odom/tools/mapping/mapping/live_mapper.py": "97d73b10d72ce675b23a9a159b2c83c99e395808e93155af7c381dfab9d6dab3",
+    "/home/agi/move_odom/tools/mapping/mapping/live_view.py": "15fdbbaadd098e65c5fc4d3087af0e4b69a22ae15fddf1e1589964edf06e0c95",
+    "/home/agi/move_odom/tools/mapping/mapping/loop_closure.py": "1a82d264754104d1cceba64300ca329ac4d07cceb12a83bf4dea67add23bfac7",
+    "/home/agi/move_odom/tools/mapping/mapping/online_map.py": "8823956dd8dfbf841f5cc1094495dfd86b26ae62adacc2868b95890b3afb19e8",
+    "/home/agi/move_odom/tools/mapping/mapping/pcd_to_grid.py": "efe85b238f6e128bd91e58c568628a6ca6607a36fa11e9ef079ee21d15cbbe79",
+    "/home/agi/move_odom/tools/mapping/mapping/pose_graph.py": "9788833be65f63b3428118f8c88eaae286ebbe4a1475c5c5d9f7cec32c956ea3",
+    "/home/agi/move_odom/tools/mapping/mapping/pose_math.py": "f6d606d92538e1839cc43011c1b2a318375346bd951151a4775a568d42174393",
+    "/home/agi/move_odom/tools/mapping/mapping/session.py": "85d3802aedb0f4d2eff87dc1b5a2895100b3138de8c2c48c5199dcfe4857f3d3",
+    "/home/agi/move_odom/tools/mapping/mapping/third_party_env.py": "f94240da668b9f76a69c98e8bad82829b53cd00a471c56a2f2f7347d741b4078",
+    "/home/agi/move_odom/tools/mapping/mapping/urdf_filter.py": "514d68cc4d004f1529bfeb5e5eef5f7239130a1dacf7676ef8281d7b9b2783d0",
+    "/home/agi/move_odom/tools/mapping/mapping.yaml": "46194acf084acada8aa2cbf4c2c84127d521931b50ae06b8028250aa84a43159"
+  }
+}
