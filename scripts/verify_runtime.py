@@ -23,6 +23,15 @@ def main():
     assert getattr(pygicp,"mapping_gil_released",False)
     from robot_mapping.cli import main as command
     assert command(["doctor","--native","--loop"])==0
+    from robot_mapping.backends.ray_native import kernels
+    assert kernels is not None, "managed runtime requires compiled ray kernels"
+    assert Path(kernels.__file__).resolve().is_relative_to(root)
+    from robot_mapping.core.ray_voxels import RayVoxelHash
+    voxels = RayVoxelHash()
+    voxels.add_points([[2.025, .075, .525]])
+    for _ in range(3):
+        voxels.ingest_rays([[.075, .075, .525, 4.125, .075, .525]])
+    assert len(voxels) == 0 and voxels.removed_voxels == 1
     # Exercise the optional companion module and its transitive library lookup.
     import gtsam_unstable
     assert Path(gtsam_unstable.__file__).resolve().is_relative_to(root)

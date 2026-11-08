@@ -18,22 +18,22 @@ SITE="${PREFIX}/lib/python${PY_VER}/site-packages"
 mkdir -p "${SRC}" "${BUILD}" "${SITE}" "${PREFIX}/tmp"
 export TMPDIR="${PREFIX}/tmp"
 
-# Compare shared package metadata and the NumPy import before and after, even
-# when installation fails. PYTHONPATH is cleared for these shared-env probes.
+# Compare the selected interpreter's packages before and after the build.
+# PYTHONPATH is cleared so the probe does not inspect the staging prefix.
 fingerprint() {
   PYTHONPATH= "${PY}" -c 'import importlib.metadata as m, json, numpy; print(json.dumps({"packages":sorted((d.metadata["Name"],d.version) for d in m.distributions()),"numpy":(numpy.__version__,numpy.__file__)},sort_keys=True))'
 }
 BEFORE="$(fingerprint)"
-verify_shared() {
+verify_interpreter() {
   result=$?
   trap - EXIT
   if [[ "$(fingerprint)" != "${BEFORE}" ]]; then
-    echo '[third_party] ERROR: shared environment changed during installation' >&2
+    echo '[native-build] ERROR: interpreter environment changed during installation' >&2
     exit 1
   fi
   exit "${result}"
 }
-trap verify_shared EXIT
+trap verify_interpreter EXIT
 
 if [[ "${MODE}" != --verify-only ]]; then
   # --target --ignore-installed cannot uninstall NumPy from the interpreter's
@@ -96,4 +96,4 @@ fi
 
 PYTHONPATH="${SITE}" LD_LIBRARY_PATH="${PREFIX}/lib:${LD_LIBRARY_PATH:-}" \
   "${PY}" "${ROOT}/scripts/verify_native.py"
-echo '[third_party] verified; shared environment unchanged'
+echo '[native-build] verified; interpreter environment unchanged'

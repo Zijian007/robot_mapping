@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-08",
+  "failure_evidence": {
+    "file": "/home/agi/robot_mapping_gdk/recordings/20261108-200217/frame_00003129.npz",
+    "window_ns": [
+      1794140128277602560,
+      1794140128477762560
+    ],
+    "samples": 36,
+    "head_ms": 0.195202,
+    "tail_ms": 25.710408,
+    "max_internal_gap_ms": 5.91233,
+    "recording_frames": 3130,
+    "recording_complete": true,
+    "sensor_duration_s": 786.299716346
+  },
+  "finding": "The old imu_between wait condition only checked the latest timestamp against the requested end. A sample beyond the window could end waiting despite missing samples within that window; no retry was made for such gaps.",
+  "causal_limit": "The failed recording omits the poller latest timestamp and elapsed wait. It cannot distinguish SDK delay / wait expiry from an in-window history gap for this particular failure.",
+  "changes": [
+    "Check requested head, tail and internal gaps using configured thresholds before returning.",
+    "Query only deficient intervals within existing wait_imu_s and at most 200 history requests; merge real valid SDK samples into sorted unique returned batch.",
+    "Serialize polling and recovery SDK access without holding the sample condition lock.",
+    "Preserve monotonic latest checks and existing 20 ms boundary / 50 ms internal gap protections.",
+    "Log latest_before_end vs history_gap, elapsed wait, latest timestamp offset and history query counts."
+  ],
+  "validation": {
+    "related_suite": "94 passed in 13.71 s",
+    "final_source_refinement": "17 source tests passed in 0.71 s",
+    "installed_sources_identical": 44,
+    "installed_runtime_native_execution": "PASS",
+    "real_sdk_cache_gap_probe": {
+      "window_ns": [
+        1794140700077091738,
+        1794140700277091738
+      ],
+      "before_tail_ms": 34.21559,
+      "after_tail_ms": 4.21485,
+      "after_max_gap_ms": 5.95854,
+      "wait_ms": 1.2706319976132363,
+      "original_samples": 39,
+      "before_samples": 33,
+      "after_samples": 39,
+      "recovered_samples": 6,
+      "real_sample_values_match": true,
+      "passed": true
+    },
+    "isolated_wheel_record_replay_save": "PASS"
+  },
+  "deployment": {
+    "wheel_sha256": "64e0c1b743274acfe4d527e44e1713fee45def1778178b8db15c40ef8886525c",
+    "backup": "/home/agi/robot_mapping/build/imu-window-20261108/wheelhouse-before",
+    "mode": "GDK-only wheel replacement; existing dependencies and core native wheel retained"
+  },
+  "limitations": [
+    "The SDK probe deliberately removed a known historical interval from its own cache; it was not a recurrence of the original failure.",
+    "Long-duration moving mapping is not validated by the short recovery probe. Actual missing sensor data still stops mapping."
+  ]
+}

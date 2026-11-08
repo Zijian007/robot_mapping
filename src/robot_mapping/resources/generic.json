@@ -19,7 +19,11 @@
     "match_iterations": 3,
     "plane_fit_mode": "pca",
     "time_source": "header",
-    "require_imu": true
+    "require_imu": true,
+    "max_imu_gap_s": 0.05,
+    "max_imu_boundary_gap_s": 0.02,
+    "imu_startup_timeout_s": 1.0,
+    "max_match_failures": 5
   },
   "body_filter": {
     "enabled": false,
@@ -46,6 +50,11 @@
     }
   },
   "grid": {
+    "ray_clearing": true,
+    "update_interval_s": 1.0,
+    "height_resolution": 0.2,
+    "max_ray_range": 30.0,
+    "max_rays": 2048,
     "resolution": 0.05,
     "min_height": -0.25,
     "max_height": 1.8,
@@ -55,6 +64,8 @@
     "keyframe_dist_th": 0.5,
     "keyframe_angle_th": 0.2,
     "voxel_resolution": 0.15,
+    "voxel_clearing": true,
+    "voxel_clear_observations": 3,
     "free_radius_m": 0.35,
     "map_point_stride": 1,
     "live_png": true,

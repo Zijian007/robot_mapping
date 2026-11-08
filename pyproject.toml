@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "wheel", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,10 +12,8 @@ dependencies = ["numpy>=1.26.4,<3"]
 
 [project.optional-dependencies]
 loop = ["numpy==1.26.4", "scipy>=1.10,<1.16", "gtsam==4.2.2"]
-export = ["matplotlib>=3.7,<4"]
-preview = ["Pillow>=10"]
 test = ["pytest>=8"]
-runtime = ["PyYAML>=6,<7", "Pillow>=10", "matplotlib>=3.7,<4"]
+runtime = ["PyYAML>=6,<7"]
 
 [project.scripts]
 robot-mapping = "robot_mapping.cli:entrypoint"

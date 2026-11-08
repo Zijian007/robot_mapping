@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,10 @@ class MappingSettings:
     plane_fit_mode: str
     time_source: str
     require_imu: bool
+    max_imu_gap_s: float
+    max_imu_boundary_gap_s: float
+    imu_startup_timeout_s: float
+    max_match_failures: int
     body_filter_enabled: bool
     body_filter_mode: str
     body_urdf_file: Path
@@ -50,9 +54,16 @@ class MappingSettings:
     grid_min_height: float
     grid_max_height: float
     grid_margin_cells: int
+    grid_ray_clearing: bool
+    grid_update_interval_s: float
+    grid_height_resolution: float
+    grid_max_ray_range: float
+    grid_max_rays: int
     keyframe_dist_th: float
     keyframe_angle_th: float
     voxel_resolution: float
+    voxel_clearing: bool
+    voxel_clear_observations: int
     free_radius_m: float
     map_point_stride: int
     live_png: bool
@@ -157,6 +168,10 @@ def mapping_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
         "plane_fit_mode": str(lio["plane_fit_mode"]),
         "time_source": str(lio["time_source"]),
         "require_imu": bool(lio["require_imu"]),
+        "max_imu_gap_s": float(lio["max_imu_gap_s"]),
+        "max_imu_boundary_gap_s": float(lio["max_imu_boundary_gap_s"]),
+        "imu_startup_timeout_s": float(lio["imu_startup_timeout_s"]),
+        "max_match_failures": int(lio["max_match_failures"]),
         "body_filter_enabled": bool(body["enabled"]),
         "body_filter_mode": str(body["mode"]),
         "body_urdf_file": str(body.get("urdf_file", "")),
@@ -169,9 +184,16 @@ def mapping_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
         "grid_min_height": float(grid["min_height"]),
         "grid_max_height": float(grid["max_height"]),
         "grid_margin_cells": int(grid["margin_cells"]),
+        "grid_ray_clearing": bool(grid["ray_clearing"]),
+        "grid_update_interval_s": float(grid["update_interval_s"]),
+        "grid_height_resolution": float(grid["height_resolution"]),
+        "grid_max_ray_range": float(grid["max_ray_range"]),
+        "grid_max_rays": int(grid["max_rays"]),
         "keyframe_dist_th": float(online["keyframe_dist_th"]),
         "keyframe_angle_th": float(online["keyframe_angle_th"]),
         "voxel_resolution": float(online["voxel_resolution"]),
+        "voxel_clearing": bool(online["voxel_clearing"]),
+        "voxel_clear_observations": int(online["voxel_clear_observations"]),
         "free_radius_m": float(online["free_radius_m"]),
         "map_point_stride": int(online["map_point_stride"]),
         "live_png": bool(online["live_png"]),
@@ -211,6 +233,31 @@ def load_settings(path: str | Path = DEFAULT_CONFIG, **overrides) -> MappingSett
     return settings_from_profile(load_mapping_config(path), path, **overrides)
 
 
+def profile_from_settings(settings: MappingSettings, profile: dict[str, Any]) -> dict[str, Any]:
+    """Snapshot every runtime setting into the configuration consumed on replay.
+
+    generic.json defines the supported keys. Preserve caller-owned robot/source
+    data, while replacing algorithm values with their effective typed settings.
+    """
+    defaults = algorithm_profile()
+    result = _deep_merge(defaults, profile)
+    for section, prefix in (("lio", ""), ("grid", "grid_"), ("online", "")):
+        for key in defaults[section]:
+            if key != "loop":
+                result[section][key] = getattr(settings, prefix + key)
+    result["online"]["loop"] = dict(result["online"]["loop"], **{
+        key: getattr(settings, "loop_" + key) for key in defaults["online"]["loop"]})
+    aliases = {"enabled": "body_filter_enabled", "mode": "body_filter_mode",
+               "front": "front_box", "back": "back_box"}
+    for key in defaults["body_filter"]:
+        value = getattr(settings, aliases.get(key, "body_" + key))
+        result["body_filter"][key] = (asdict(value) if isinstance(value, BodyBox) else
+                                      str(value) if isinstance(value, Path) else value)
+    result.setdefault("session", {})["maps_root"] = str(settings.maps_root)
+    result.pop("effective_settings", None)  # retired duplicate, never read by replay
+    return result
+
+
 def validate_settings(settings: MappingSettings) -> None:
     for name,value in vars(settings).items():
         if isinstance(value,float) and not math.isfinite(value):
@@ -223,6 +270,14 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("standalone mapping requires header/source time")
     if settings.grid_min_height > settings.grid_max_height:
         raise ValueError("grid min_height must not exceed max_height")
+    if min(settings.grid_height_resolution, settings.grid_max_ray_range, settings.grid_max_rays) <= 0:
+        raise ValueError("grid ray parameters must be positive")
+    if settings.grid_update_interval_s < 0:
+        raise ValueError("grid update_interval_s must be nonnegative")
+    if settings.voxel_clearing and not settings.grid_ray_clearing:
+        raise ValueError("online.voxel_clearing requires grid.ray_clearing")
+    if settings.voxel_clear_observations < 2:
+        raise ValueError("online.voxel_clear_observations must be at least 2")
     if settings.body_filter_mode not in {"urdf", "box"}:
         raise ValueError("body_filter.mode 必须为 urdf 或 box")
     if settings.body_collision_threshold < 0:
@@ -231,6 +286,10 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("body tf_timeout_s 必须为有限正数")
     if settings.lidar_ready < 0:
         raise ValueError("--lidar-ready 不能小于 0")
+    for name in ("max_imu_gap_s", "max_imu_boundary_gap_s", "imu_startup_timeout_s",
+                 "min_imu_samples", "max_match_failures"):
+        if getattr(settings, name) <= 0:
+            raise ValueError(f"{name} 必须大于 0")
     if settings.cube_side_length <= 0 or settings.det_range <= 0:
         raise ValueError("--cube-side-length / --det-range 必须大于 0")
     if settings.filter_size_map < 0 or settings.filter_size_surf < 0:

@@ -44,7 +44,9 @@ class Frames:
             np.array([[2., 2., .5], [3., 2., .5], [2., 3., .5]]), np.array([0, 50_000_000, 100_000_000]))
 
     def imu_between(self, begin_ns, end_ns, *, clock_id):
-        return ImuBatch("imu_front", clock_id, np.array([end_ns]), np.zeros((1, 3)), np.array([[0., 0., 9.81]]))
+        stamps = np.arange(begin_ns + 5_000_000, end_ns + 1, 5_000_000, dtype=np.int64)
+        return ImuBatch("imu_front", clock_id, stamps, np.zeros((len(stamps), 3)),
+                        np.tile([0., 0., 9.81], (len(stamps), 1)))
 
     def close(self):
         self.closed = True
@@ -60,7 +62,7 @@ class Lio:
         self.stamps.append(scan.frame_stamp)
         if self.index <= 10:
             return {"status": "initializing", "stamp": scan.frame_stamp}
-        return {"status": "scan_to_map", "stamp": scan.frame_stamp,
+        return {"status": "scan_to_map", "stamp": scan.frame_stamp, "lidar_update_valid": True,
             "position": [.2 * (self.index - 11), 0, 0], "orientation_xyzw": [0, 0, 0, 1],
             "scan_body_points": scan.points_array[:, :3]}
 
@@ -104,3 +106,68 @@ def test_invalid_settings_raise_value_error(tmp_path):
     settings = replace(load_settings(config_file(tmp_path)), grid_resolution=0.)
     with pytest.raises(ValueError, match="grid-resolution"):
         validate_settings(settings)
+
+
+@pytest.mark.parametrize("validity", [False, None])
+def test_map_refuses_invalid_or_unreported_lidar_update(validity):
+    from robot_mapping.core.online_map import OnlineMap
+    mapping = OnlineMap()
+    odom = {"status": "scan_to_map", "position": [0, 0, 0],
+            "orientation_xyzw": [0, 0, 0, 1], "scan_body_points": [[1, 2, .5]]}
+    if validity is not None:
+        odom["lidar_update_valid"] = validity
+    assert not mapping.ingest_odom(odom)
+    assert mapping.keyframe_count() == 0
+    assert len(mapping.voxels) == 0
+
+
+@pytest.mark.parametrize("field", ["max_imu_gap_s", "max_imu_boundary_gap_s",
+                                   "imu_startup_timeout_s", "max_match_failures", "min_imu_samples"])
+def test_tracking_guard_settings_must_be_positive(tmp_path, field):
+    from robot_mapping.config import validate_settings
+    settings = replace(load_settings(config_file(tmp_path)), **{field: 0})
+    with pytest.raises(ValueError, match=field):
+        validate_settings(settings)
+
+
+@pytest.mark.parametrize("inject_policy", [False, True])
+def test_frontend_delegates_frame_choice_and_defaults_to_backend_coordinates(tmp_path, inject_policy):
+    from robot_mapping.core.online_map import OnlineMap
+    settings = load_settings(config_file(tmp_path))
+    mapping = OnlineMap()
+    calls = []
+    custom = np.eye(4)
+    custom[:3, 3] = [10, 20, 30]
+
+    def initialize(mean_acc, generation):
+        calls.append((mean_acc.copy(), generation))
+        return mapping.set_map_alignment(custom, generation=generation)
+
+    mounting = np.eye(4)
+    mounting[:3, 3] = [.2, .3, .4]
+    frontend = MappingFrontend(Frames(14), settings, online_map=mapping,
+        lidar_extrinsics={"front": mounting}, clock_id="gdk_sensor", imu_frame_id="imu_front",
+        lio=Lio(), initialize_map=initialize if inject_policy else None)
+    frontend.setup_lio()
+    frontend.run(threading.Event())
+    np.testing.assert_array_equal(mapping.keyframe_opt_matrix(0), custom if inject_policy else np.eye(4))
+    if inject_policy:
+        assert len(calls) == 1
+        np.testing.assert_allclose(calls[0][0], [0, 0, 9.81])
+        assert calls[0][1] == mapping.generation
+
+
+def test_dual_lidar_merge_transforms_ray_origins_with_endpoints():
+    from robot_mapping.backends.fastlio import BackendScan
+    from robot_mapping.runtime.frontend import merge_back_into_front
+    front = BackendScan(np.array([[2, 0, .5, 1, 20, 0, 0, 0]], dtype=np.float32), 10., .1, 1, 0)
+    back = replace(front, points_array=front.points_array.copy())
+    rotation = np.diag([-1., -1., 1.])
+    translation = np.array([-.6, .1, .02])
+    merged, _, count = merge_back_into_front(front, back, rotation_front=np.eye(3),
+        translation_front=np.zeros(3), rotation_back=rotation, translation_back=translation,
+        body_box=None, max_scan_duration_s=.12)
+    assert count == 1
+    np.testing.assert_allclose(merged.points_array[0, 5:8], 0.)
+    np.testing.assert_allclose(merged.points_array[1, 5:8], translation)
+    np.testing.assert_allclose(merged.points_array[1, :3], rotation @ [2, 0, .5]+translation)

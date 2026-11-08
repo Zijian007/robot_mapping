@@ -7,25 +7,27 @@ from typing import Sequence
 import numpy as np
 
 
-def gravity_aligned_map_from_lio(mean_acc: np.ndarray, base_from_imu: np.ndarray) -> np.ndarray:
-    """Map +Z follows initial accelerometer up; +X follows projected base heading.
+def gravity_aligned_frame(up, forward, origin=(0., 0., 0.)) -> np.ndarray:
+    """Return output_from_input from three vectors expressed in input axes.
 
-    FAST-LIO2 keeps its initial IMU axes and estimates a gravity vector in that
-    frame. Rotate map output, without changing its EKF state or observations.
-    The map origin remains the initial IMU origin.
+    +Z follows up; +X follows the horizontal projection of forward. The caller
+    supplies the origin and reference vectors; no robot frame is assumed.
     """
-    up = np.asarray(mean_acc, dtype=np.float64)
-    rotation = np.asarray(base_from_imu, dtype=np.float64)
-    if up.shape != (3,) or not np.isfinite(up).all() or np.linalg.norm(up) < 1e-6:
-        raise ValueError("无法从初始化 IMU 数据确定重力方向")
-    up = up / np.linalg.norm(up)
-    forward = rotation.T @ np.array([1., 0., 0.])
+    up = np.array(up, dtype=np.float64, copy=True)
+    forward = np.array(forward, dtype=np.float64, copy=True)
+    origin = np.asarray(origin, dtype=np.float64)
+    if any(v.shape != (3,) or not np.isfinite(v).all() for v in (up, forward, origin)):
+        raise ValueError("frame vectors must be finite 3-vectors")
+    if np.linalg.norm(up) < 1e-6:
+        raise ValueError("cannot determine up direction")
+    up /= np.linalg.norm(up)
     forward -= up * np.dot(forward, up)
-    if not np.isfinite(forward).all() or np.linalg.norm(forward) < 1e-6:
-        raise ValueError("无法确定初始底盘水平朝向")
+    if np.linalg.norm(forward) < 1e-6:
+        raise ValueError("cannot determine horizontal heading")
     forward /= np.linalg.norm(forward)
     mat = np.eye(4)
     mat[:3, :3] = np.stack([forward, np.cross(up, forward), up])
+    mat[:3, 3] = -mat[:3, :3] @ origin
     return mat
 
 
@@ -53,36 +55,6 @@ def quat_xyzw_to_rot(q: Sequence[float]) -> np.ndarray:
     )
 
 
-def rot_to_quat_xyzw(r: np.ndarray) -> tuple[float, float, float, float]:
-    m = np.asarray(r, dtype=np.float64)
-    tr = float(m[0, 0] + m[1, 1] + m[2, 2])
-    if tr > 0.0:
-        s = math.sqrt(tr + 1.0) * 2.0
-        w = 0.25 * s
-        x = (m[2, 1] - m[1, 2]) / s
-        y = (m[0, 2] - m[2, 0]) / s
-        z = (m[1, 0] - m[0, 1]) / s
-    elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
-        s = math.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2.0
-        w = (m[2, 1] - m[1, 2]) / s
-        x = 0.25 * s
-        y = (m[0, 1] + m[1, 0]) / s
-        z = (m[0, 2] + m[2, 0]) / s
-    elif m[1, 1] > m[2, 2]:
-        s = math.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2.0
-        w = (m[0, 2] - m[2, 0]) / s
-        x = (m[0, 1] + m[1, 0]) / s
-        y = 0.25 * s
-        z = (m[1, 2] + m[2, 1]) / s
-    else:
-        s = math.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2.0
-        w = (m[1, 0] - m[0, 1]) / s
-        x = (m[0, 2] + m[2, 0]) / s
-        y = (m[1, 2] + m[2, 1]) / s
-        z = 0.25 * s
-    return float(x), float(y), float(z), float(w)
-
-
 def pose_parts_to_matrix(
     position: Sequence[float],
     orientation_xyzw: Sequence[float],
@@ -91,12 +63,6 @@ def pose_parts_to_matrix(
     t[:3, :3] = quat_xyzw_to_rot(orientation_xyzw)
     t[:3, 3] = np.asarray(position, dtype=np.float64)
     return t
-
-
-def matrix_to_pose_parts(mat: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
-    m = np.asarray(mat, dtype=np.float64)
-    pos = (float(m[0, 3]), float(m[1, 3]), float(m[2, 3]))
-    return pos, rot_to_quat_xyzw(m[:3, :3])
 
 
 def invert_se3(mat: np.ndarray) -> np.ndarray:

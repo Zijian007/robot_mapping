@@ -1,0 +1,206 @@
+{
+  "date": "2026-11-08",
+  "scope": "Repository organization, generated-artifact cleanup, and evaluation-tool support for cleared baselines. Runtime packages and user data unchanged.",
+  "space": {
+    "before_bytes": {
+      "/home/agi/robot_mapping": 686977024,
+      "/home/agi/robot_mapping_gdk": 1569071104
+    },
+    "after_bytes": {
+      "/home/agi/robot_mapping": 524132352,
+      "/home/agi/robot_mapping_gdk": 1211510784
+    },
+    "net_reclaimed_bytes": 520404992
+  },
+  "removed_generated_paths": [
+    {
+      "path": "/home/agi/robot_mapping/python.INFO",
+      "bytes": 0
+    },
+    {
+      "path": "/home/agi/robot_mapping/build",
+      "bytes": 169527524
+    },
+    {
+      "path": "/home/agi/robot_mapping/dist",
+      "bytes": 1704983
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/build",
+      "bytes": 74834
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/dist",
+      "bytes": 26329
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/comparisons",
+      "bytes": 359595514
+    },
+    {
+      "path": "/home/agi/robot_mapping/.pytest_cache",
+      "bytes": 20556
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/.pytest_cache",
+      "bytes": 8068
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/__pycache__",
+      "bytes": 32662
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/filters/__pycache__",
+      "bytes": 11091
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/resources/__pycache__",
+      "bytes": 198
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/backends/__pycache__",
+      "bytes": 20160
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/core/__pycache__",
+      "bytes": 53888
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping/runtime/__pycache__",
+      "bytes": 22962
+    },
+    {
+      "path": "/home/agi/robot_mapping/tests/__pycache__",
+      "bytes": 180652
+    },
+    {
+      "path": "/home/agi/robot_mapping/scripts/__pycache__",
+      "bytes": 17698
+    },
+    {
+      "path": "/home/agi/robot_mapping/src/robot_mapping.egg-info",
+      "bytes": 15666
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/__pycache__",
+      "bytes": 58353
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/storage/__pycache__",
+      "bytes": 15645
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/resources/__pycache__",
+      "bytes": 246
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/tests/__pycache__",
+      "bytes": 107315
+    },
+    {
+      "path": "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk.egg-info",
+      "bytes": 10261
+    }
+  ],
+  "relocated_paths": [
+    [
+      "/home/agi/robot_mapping_gdk/comparisons/20261108-voxel-session/projection_observations.npz",
+      "/home/agi/robot_mapping_gdk/artifacts/baselines/20261108-voxel-session/projection_observations.npz"
+    ],
+    [
+      "/home/agi/robot_mapping_gdk/comparisons/20261108-voxel-session/maps/20261108_180453_537576/map_0000",
+      "/home/agi/robot_mapping_gdk/artifacts/baselines/20261108-voxel-session/map"
+    ],
+    [
+      "/home/agi/robot_mapping/build/perf-20261108/baseline-observations.npz",
+      "/home/agi/robot_mapping/artifacts/baselines/native-rays-20261108/observations.npz"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/performance-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/performance-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/native-rays-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/native-rays-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/cleanup-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/cleanup-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/imu-window-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/imu-window-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/thread-runtime-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/thread-runtime-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/tracking-guards-20261108.md",
+      "/home/agi/robot_mapping/docs/history/20261108/tracking-guards-20261108.md"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/voxel-clearing-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/voxel-clearing-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/docs/grid-coverage-20261108.json",
+      "/home/agi/robot_mapping/docs/history/20261108/grid-coverage-20261108.json"
+    ],
+    [
+      "/home/agi/robot_mapping/python.log.INFO.20261108-202458.843058.0",
+      "/home/agi/robot_mapping/artifacts/logs/python.log.INFO.20261108-202458.843058.0"
+    ],
+    [
+      "/home/agi/robot_mapping_gdk/scripts/compare_ray_grid.py",
+      "/home/agi/robot_mapping_gdk/tools/evaluation/compare_ray_grid.py"
+    ],
+    [
+      "/home/agi/robot_mapping_gdk/scripts/compare_voxel_clearing.py",
+      "/home/agi/robot_mapping_gdk/tools/evaluation/compare_voxel_clearing.py"
+    ],
+    [
+      "/home/agi/robot_mapping_gdk/scripts/evaluate_grid_coverage.py",
+      "/home/agi/robot_mapping_gdk/tools/evaluation/evaluate_grid_coverage.py"
+    ]
+  ],
+  "preserved": {
+    "runtime_and_user_data_unchanged": {
+      "/home/agi/robot_mapping/.venv": true,
+      "/home/agi/robot_mapping/wheelhouse": true,
+      "/home/agi/robot_mapping_gdk/maps": true,
+      "/home/agi/robot_mapping_gdk/recordings": true
+    },
+    "g2_mapping_config_sha256": "a5aec1192b23ded3e273aab436358a6f762e86589ab46e9f226b2e588ad7bf66",
+    "runtime_python_sources_identical_to_installed": 44,
+    "baselines": [
+      "/home/agi/robot_mapping_gdk/artifacts/baselines/20261108-voxel-session",
+      "/home/agi/robot_mapping/artifacts/baselines/native-rays-20261108"
+    ],
+    "baseline_retention_reason": "The old raw recording had already been removed before this cleanup. Keep one full current observation archive plus matching map; old variants removed after preserving result summaries."
+  },
+  "source_audit": {
+    "unused_import_candidates": [],
+    "private_definition_only_candidates": [],
+    "business_source_removed": [],
+    "retained_modules": {
+      "core/projection.py": "Imported by GDK PCD-to-grid exporter",
+      "core/spatial.py": "Shared storage and disabled-clearing fallback",
+      "core/ray_grid.py, core/ray_voxels.py": "Native dispatch and Python reference paths both required"
+    }
+  },
+  "tool_change": "Moved three evaluation CLIs to tools/evaluation; compare_voxel_clearing now validates raw or cleared published maps using recorded baseline thresholds, independent of the requested evaluation threshold. Geometry mismatch still fails.",
+  "validation": {
+    "regression": "202 passed in 19.70 s; external FAST-LIO SDK adapter tests used existing development Protobuf via appended sys.path",
+    "evaluation_tests": "3 passed in 6.17 s; raw/cleared baselines, alternate threshold and mismatch rejection",
+    "native_runtime": "PASS; installed native execution and own-library paths",
+    "2d_evaluation": "PASS with retained full baseline",
+    "3d_evaluation": "PASS: 83 keyframes, 270 observations, 83776 raw voxels, 80749 cleared voxels; exact published voxel-set match"
+  },
+  "notes": [
+    "All pre-existing business-source edits are retained. No Git reset, staging or commit was performed.",
+    "Original baseline and diagnostics paths inside historical reports are retained as historical evidence; consult the archive indexes for current locations.",
+    "Test-derived images and PCD outputs were temporary and removed after validation; reports and logs are retained."
+  ],
+  "inventory": "/home/agi/robot_mapping/artifacts/history/20261108/cleanup-validation/inventory.json"
+}

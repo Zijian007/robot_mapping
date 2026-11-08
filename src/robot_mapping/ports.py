@@ -18,10 +18,15 @@ class _LioState(TypedDict):
 
 
 class LioResult(_LioState, total=False):
-    """Pose/cloud fields are present for scan_to_map; metrics are optional."""
+    """Only scan_to_map with lidar_update_valid=True may contribute to a map.
+
+    prediction_only carries IMU-predicted state after a failed lidar update.
+    """
+    lidar_update_valid: bool
     position: Sequence[float] | np.ndarray
     orientation_xyzw: Sequence[float] | np.ndarray
     scan_body_points: np.ndarray
+    scan_body_rays: np.ndarray  # (N,6), deskewed origin and measured endpoint in IMU axes
     matched_points: int
     map_points: int
     mean_abs_residual: float

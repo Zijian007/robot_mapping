@@ -23,18 +23,22 @@ def load_gtsam() -> ModuleType:
 def load_pygicp() -> ModuleType:
     _require_numpy1()
     import pygicp
-    if not getattr(pygicp, "mapping_gil_released", False) or not hasattr(pygicp.FastVGICP, "has_converged"):
+    if not getattr(pygicp, "mapping_gil_released", False) or not hasattr(getattr(pygicp, "FastVGICP", None), "has_converged"):
         raise RuntimeError("VGICP requires the convergence/GIL patched binding")
     return pygicp
 
 
-def load_fastlio2() -> ModuleType:
+def load_fastlio2(*, require_rays: bool = False) -> ModuleType:
     import fastlio2
     if not fastlio2.native_available():
         raise RuntimeError("FAST-LIO2 native backend is unavailable")
     from fastlio2 import _fastlio2
     if not getattr(_fastlio2, "SCAN_BODY_POINTS_VERSION", 0):
         raise RuntimeError("FAST-LIO2 requires the frame point-cloud export interface")
+    if not getattr(_fastlio2, "LIDAR_UPDATE_VALIDITY_VERSION", 0):
+        raise RuntimeError("FAST-LIO2 requires the lidar update validity/map insertion guard; rebuild the native backend")
+    if require_rays and not getattr(_fastlio2, "SCAN_BODY_RAYS_VERSION", 0):
+        raise RuntimeError("ray clearing requires deskewed ray export; rebuild FAST-LIO2")
     return fastlio2
 
 

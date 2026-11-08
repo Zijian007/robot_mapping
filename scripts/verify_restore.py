@@ -80,10 +80,14 @@ class Frames:
         stamp=100_000_000_000+self.index*100_000_000
         self.index+=1
         time.sleep(.01)
+        x,y=np.meshgrid(np.linspace(1,5,20),np.linspace(-2,2,20))
+        points=np.column_stack((x.ravel(),y.ravel(),np.full(x.size,.5)))
         return LidarScan('front','lidar','sensor',stamp,100_000_000,1,
-            np.array([[2.,2.,.5],[3.,2.,.5],[2.,3.,.5]]),np.array([0,50_000_000,100_000_000]))
+            points,np.linspace(0,100_000_000,len(points),dtype=np.int64))
     def imu_between(self,begin,end,*,clock_id):
-        return ImuBatch('imu',clock_id,np.array([end]),np.zeros((1,3)),np.array([[0.,0.,9.81]]))
+        stamps=np.arange(begin+5_000_000,end+1,5_000_000,dtype=np.int64)
+        return ImuBatch('imu',clock_id,stamps,np.zeros((len(stamps),3)),
+            np.tile([0.,0.,9.81],(len(stamps),1)))
     def close(self): pass
 import time
 def finish(session):

@@ -1,0 +1,283 @@
+{
+  "date": "2026-11-08",
+  "original_failure": {
+    "attachment": "/home/agi/.codex/attachments/61c02d23-627c-45ff-8a86-353aeda8401f/Pasted text.txt",
+    "processed_frame_gap_s": 1.6,
+    "limit_s": 1.0,
+    "last_total_ms": 1560.1,
+    "user_terminal_affinity": [
+      20,
+      21,
+      22,
+      23
+    ],
+    "user_opened_8080": true,
+    "user_shell_omp_variables": "unset",
+    "root_cause": "Original 1.6 s spike not conclusively reproduced or attributed."
+  },
+  "changes": [
+    "Deduplicate unchanged preview snapshots before JPEG/PNG encoding; notify HTTP clients only on new image; new clients receive current image.",
+    "Extend real SDK IMU history recovery from 200 ms to at most 1 s (200 queries at 5 ms); stop can interrupt recovery."
+  ],
+  "unchanged_protections": {
+    "processed_frame_gap_limit_s": 1.0,
+    "imu_internal_gap_limit_ms": 50,
+    "fabricated_samples": false
+  },
+  "validation": {
+    "source_tests": "191 passed in 22.54 s",
+    "new_regressions": [
+      "350 ms delayed IMU polling",
+      "missing history preserved",
+      "bounded history queries",
+      "stop interrupts recovery",
+      "preview dedup and new-client delivery",
+      "preview stop wakes waiter",
+      "PNG failure keeps HTTP frame available"
+    ],
+    "installed_runtime": "native execution PASS; loaded libraries inside runtime",
+    "source_installed_python_files_identical": 44,
+    "isolated_wheels": "PASS: independently installed launcher; SDK-free imports; recording, native replay and map save",
+    "installed_gdk_wheel_sha256": "16de5b85b7571880a4291f8a003b6e6738e212871aac069652cf24d600aa547a"
+  },
+  "before_original_launcher": {
+    "result": {
+      "command": [
+        "bash",
+        "/home/agi/robot_mapping_gdk/scripts/run_g2.sh",
+        "--duration-s",
+        "30",
+        "--maps-root",
+        "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-probe/maps",
+        "--record-dir",
+        "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-probe/recording"
+      ],
+      "pid": 716407,
+      "exit_code": 1,
+      "wall_s": 11.101049307999347
+    },
+    "status": {
+      "session_id": "20261108_194354_431697",
+      "state": "ERROR",
+      "running": false,
+      "finished": true,
+      "error": "IMU 时间覆盖不完整，停止建图并保存已有地图：内部断点过长 (0.0856s > 0.0500s)",
+      "frames": 21,
+      "skipped_frames": 1,
+      "lio_status": "waiting_for_imu",
+      "match_failures": 0,
+      "consecutive_match_failures": 0,
+      "body_removed": 1312,
+      "timings": {
+        "frames": 21,
+        "last_ms": {
+          "read_ms": 36.23837799750618,
+          "prepare_ms": 38.14571000111755,
+          "imu_ms": 1.6874060020199977,
+          "lio_ms": 206.69828799873358,
+          "map_ms": 2.533416001824662,
+          "grid_ms": 0.0,
+          "voxel_ms": 0.0,
+          "total_ms": 287.08375899805105
+        },
+        "stages_ms": {
+          "read_ms": {
+            "p50": 17.63795200167806,
+            "p95": 36.23837799750618,
+            "p99": 36.903555597382365,
+            "max": 37.06984999735141
+          },
+          "prepare_ms": {
+            "p50": 75.20282899713493,
+            "p95": 126.51112700041267,
+            "p99": 130.30609740162618,
+            "max": 131.25484000192955
+          },
+          "imu_ms": {
+            "p50": 1.6874060020199977,
+            "p95": 7.548441000835737,
+            "p99": 11.603230601031104,
+            "max": 12.616928001079941
+          },
+          "lio_ms": {
+            "p50": 162.76985100193997,
+            "p95": 274.49444699959713,
+            "p99": 304.11964939776226,
+            "max": 311.52594999730354
+          },
+          "map_ms": {
+            "p50": 1.4270569990912918,
+            "p95": 159.82508299930487,
+            "p99": 173.0222957994556,
+            "max": 176.3215989994933
+          },
+          "grid_ms": {
+            "p50": 0.0,
+            "p95": 95.51177699904656,
+            "p99": 118.27236979879673,
+            "max": 123.96251799873426
+          },
+          "voxel_ms": {
+            "p50": 0.0,
+            "p95": 36.2751480024599,
+            "p99": 82.7973936022318,
+            "max": 94.42795500217471
+          },
+          "total_ms": {
+            "p50": 287.08375899805105,
+            "p95": 554.1675349995785,
+            "p99": 570.6778653991933,
+            "max": 574.8054479990969
+          }
+        }
+      },
+      "map": {
+        "keyframes": 1,
+        "voxels": 7824,
+        "occupied_cells": 1906,
+        "free_cells": 202,
+        "last_ingest_ms": 79.30407199819456,
+        "loops": 0,
+        "grid_observations": 4,
+        "removed_voxels": 0
+      },
+      "unsaved": false,
+      "last_saved": "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-probe/maps/20261108_194354_431697/map_0000"
+    },
+    "recording": {
+      "frames": 22,
+      "complete": true,
+      "max_adjacent_scan_begin_gap_ms": 600.011434,
+      "max_internal_imu_gap_ms": 85.55481,
+      "worst_imu_frame": "frame_00000021.npz"
+    }
+  },
+  "after_original_launcher": {
+    "result": {
+      "command": [
+        "bash",
+        "/home/agi/robot_mapping_gdk/scripts/run_g2.sh",
+        "--duration-s",
+        "60",
+        "--maps-root",
+        "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-after/maps",
+        "--record-dir",
+        "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-after/recording"
+      ],
+      "pid": 752071,
+      "exit_code": 0,
+      "wall_s": 63.71095660799983,
+      "preview_client": {
+        "connections": 2,
+        "jpeg_frames": 50,
+        "bytes": 1061887
+      }
+    },
+    "status": {
+      "session_id": "20261108_195546_982686",
+      "state": "STOPPED",
+      "running": false,
+      "finished": true,
+      "error": null,
+      "frames": 268,
+      "skipped_frames": 0,
+      "lio_status": "scan_to_map",
+      "match_failures": 0,
+      "consecutive_match_failures": 0,
+      "body_removed": 15922,
+      "timings": {
+        "frames": 256,
+        "last_ms": {
+          "read_ms": 8.393912998144515,
+          "prepare_ms": 46.8891269993037,
+          "imu_ms": 0.9882820013444871,
+          "lio_ms": 176.6682569978002,
+          "map_ms": 1.3945169994258322,
+          "grid_ms": 0.0,
+          "voxel_ms": 0.0,
+          "total_ms": 234.45040499791503
+        },
+        "stages_ms": {
+          "read_ms": {
+            "p50": 11.520317499162047,
+            "p95": 30.409304749809962,
+            "p99": 43.83229469785873,
+            "max": 56.698866002989234
+          },
+          "prepare_ms": {
+            "p50": 41.868506499668,
+            "p95": 88.35753250241396,
+            "p99": 111.42238389893461,
+            "max": 125.55549899843754
+          },
+          "imu_ms": {
+            "p50": 0.7524709999415791,
+            "p95": 2.2405664994948893,
+            "p99": 6.208874099138478,
+            "max": 8.041524000873324
+          },
+          "lio_ms": {
+            "p50": 133.9205665008194,
+            "p95": 197.96363025034225,
+            "p99": 224.54516939906165,
+            "max": 292.4749029989471
+          },
+          "map_ms": {
+            "p50": 1.6149434995895717,
+            "p95": 72.97918550102622,
+            "p99": 87.14248850010335,
+            "max": 98.84616400086088
+          },
+          "grid_ms": {
+            "p50": 0.0,
+            "p95": 44.415394499992544,
+            "p99": 56.3122016004854,
+            "max": 63.097983998886775
+          },
+          "voxel_ms": {
+            "p50": 0.0,
+            "p95": 26.74575950095459,
+            "p99": 30.793179100510308,
+            "max": 39.20591499627335
+          },
+          "total_ms": {
+            "p50": 211.6671005005628,
+            "p95": 309.51235675001953,
+            "p99": 363.4329263020844,
+            "max": 404.70046599875786
+          }
+        }
+      },
+      "map": {
+        "keyframes": 1,
+        "voxels": 7653,
+        "occupied_cells": 4129,
+        "free_cells": 3075,
+        "last_ingest_ms": 70.71950300087337,
+        "loops": 0,
+        "grid_observations": 50,
+        "removed_voxels": 2
+      },
+      "unsaved": false,
+      "last_saved": "/home/agi/robot_mapping/build/thread-runtime-20261108/launcher-after/maps/20261108_195546_982686/map_0000"
+    },
+    "recording": {
+      "frames": 268,
+      "complete": true,
+      "max_adjacent_scan_begin_gap_ms": 400.331494,
+      "max_internal_imu_gap_ms": 15.77114,
+      "worst_imu_frame": "frame_00000185.npz"
+    }
+  },
+  "limitations": [
+    "Before/after live runs observed different sensor data and shared CPU load; not a controlled speed benchmark.",
+    "After run used a persistent synthetic MJPEG consumer, which does not reproduce browser decode CPU cost.",
+    "After run produced only one keyframe; moving mapping and long-duration reliability are not established.",
+    "Final timing summary contains the last 256 frames, not all 268 frames."
+  ],
+  "backup": "/home/agi/robot_mapping/build/thread-runtime-20261108/wheelhouse-before",
+  "changed_source_sha256": {
+    "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/source.py": "e814db827577272233bebefba789c3b3014019d1e3fb592705d900fab89846b4",
+    "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/live_view.py": "86d270ce2205fe8ab1462962a416fde058b757a989e65777a6e7f5223ab310c6"
+  }
+}

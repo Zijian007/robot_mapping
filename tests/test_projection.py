@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 from robot_mapping.core.online_map import OnlineMap, SE3Pose
-from robot_mapping.core.pose_math import gravity_aligned_map_from_lio, transform_points
+from robot_mapping.core.pose_math import gravity_aligned_frame, transform_points, invert_se3
 
 
 def pose(x=0):
@@ -40,7 +40,7 @@ def test_gravity_alignment_excludes_floor_without_raising_height_cut():
     rotation = np.array([[np.cos(theta), 0, np.sin(theta)], [0, 1, 0],
                          [-np.sin(theta), 0, np.cos(theta)]])
     up = rotation.T @ np.array([0., 0., 9.81])
-    alignment = gravity_aligned_map_from_lio(up, rotation)
+    alignment = gravity_aligned_frame(up, rotation.T @ [1, 0, 0])
     np.testing.assert_allclose(alignment[:3, :3], rotation, atol=1e-12)
     floor = np.array([[x, 1, -.32] for x in np.linspace(1, 5, 40)])
     obstacle = np.array([[2., 2., .3]])
@@ -59,7 +59,7 @@ def test_alignment_does_not_change_mid_map_or_cross_reset():
     om = OnlineMap()
     stale = om.generation
     om.start_mapping()
-    alignment = gravity_aligned_map_from_lio([0, 1, 9.8], np.eye(3))
+    alignment = gravity_aligned_frame([0, 1, 9.8], [1, 0, 0])
     assert not om.set_map_alignment(alignment, generation=stale)
     assert om.set_map_alignment(alignment, generation=om.generation)
     assert om.ingest_local_points(pose(), np.array([[2, 2, 1]]))
@@ -72,4 +72,21 @@ def test_alignment_does_not_change_mid_map_or_cross_reset():
 @pytest.mark.parametrize("acc", [[0, 0, 0], [np.nan, 0, 1]])
 def test_invalid_initial_acceleration_rejects_alignment(acc):
     with pytest.raises(ValueError):
-        gravity_aligned_map_from_lio(acc, np.eye(3))
+        gravity_aligned_frame(acc, [1, 0, 0])
+
+
+def test_core_accepts_arbitrary_origin_and_explicit_projection_geometry():
+    mapping = OnlineMap()
+    alignment = np.eye(4)
+    alignment[:3, 3] = [10, 20, 30]
+    footprint = np.eye(4)
+    footprint[:3, 3] = [.5, .2, 0]
+    assert mapping.set_map_alignment(alignment, tracking_from_footprint=footprint,
+                                     height_bounds=(30.1, 32.))
+    mapping.ingest_local_points(pose(), [[2, 2, 0], [3, 3, 1]])
+    assert mapping.grid.occupied_count() == 1
+    assert value_at(mapping.grid, 10.5, 20.2) == 0
+    snapshot = mapping.freeze_for_save()
+    np.testing.assert_array_equal(snapshot.map_from_lio, alignment)
+    np.testing.assert_array_equal(snapshot.tracking_from_footprint, footprint)
+    assert (snapshot.grid_min_height, snapshot.grid_max_height) == (30.1, 32.)

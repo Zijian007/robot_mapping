@@ -38,6 +38,8 @@ def main(argv=None):
         except importlib.metadata.PackageNotFoundError:
             report["installed"][name] = None
     ok = True
+    from .backends.ray_native import kernels
+    report["ray_backend"] = "cpp" if kernels is not None else "numpy"
     if args.native:
         from .backends.capabilities import fastlio2_available
         report["fastlio2_scan_export"] = fastlio2_available()

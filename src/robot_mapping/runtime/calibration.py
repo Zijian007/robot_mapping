@@ -1,5 +1,4 @@
 """Explicit robot configuration and resource path resolution."""
-from pathlib import Path
 import numpy as np
 
 from robot_mapping.core.pose_math import is_se3

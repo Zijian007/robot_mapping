@@ -1,0 +1,192 @@
+{
+  "date": "2026-11-08",
+  "scope": "C++ ray kernels, cached voxel membership, OpenBLAS limit and runtime stage diagnostics",
+  "tests": {
+    "cpp_passed": 184,
+    "numpy_fallback_passed": 177,
+    "native_only_tests_skipped_without_extension": 7
+  },
+  "evidence_comparison": {
+    "observations": 270,
+    "keyframes": 83,
+    "voxels": 80749,
+    "removed_voxels": 3189,
+    "scores_values_cells_misses_equal_each_observation": true,
+    "timings_ms": {
+      "numpy": {
+        "grid": {
+          "p50": 53.20199500056333,
+          "p95": 67.45170889962537,
+          "p99": 71.94839889014474
+        },
+        "voxels": {
+          "p50": 122.39797900019767,
+          "p95": 144.63225459994646,
+          "p99": 150.36072749056984
+        },
+        "total": {
+          "p50": 175.3847019999739,
+          "p95": 208.24325654912172,
+          "p99": 216.00820880950778
+        }
+      },
+      "cpp": {
+        "grid": {
+          "p50": 26.594679500703933,
+          "p95": 38.6976474005678,
+          "p99": 43.218741469809174
+        },
+        "voxels": {
+          "p50": 23.613066000507388,
+          "p95": 27.916174149413564,
+          "p99": 29.011504928857903
+        },
+        "total": {
+          "p50": 52.17159750009159,
+          "p95": 66.43552040113718,
+          "p99": 69.47559529080536
+        }
+      }
+    },
+    "input_archive": "/home/agi/robot_mapping_gdk/comparisons/20261108-voxel-session/projection_observations.npz",
+    "input_sha256": "06e2b1eaff008beb738f6113c68489b843b092818edbb825fbbb3ec6b181cac7"
+  },
+  "incident_replay": {
+    "frames": 60,
+    "map": {
+      "keyframes": 1,
+      "voxels": 7101,
+      "occupied_cells": 2876,
+      "free_cells": 635,
+      "last_ingest_ms": 63.06933099949674,
+      "loops": 0,
+      "grid_observations": 12,
+      "removed_voxels": 0
+    },
+    "timings": {
+      "frames": 60,
+      "last_ms": {
+        "read_ms": 20.42040999913297,
+        "prepare_ms": 20.281793000322068,
+        "imu_ms": 0.37485099892364815,
+        "lio_ms": 125.71027100057108,
+        "map_ms": 63.17137000041839,
+        "grid_ms": 39.01610499997332,
+        "voxel_ms": 22.43062799971085,
+        "total_ms": 230.09411999919394
+      },
+      "stages_ms": {
+        "read_ms": {
+          "p50": 19.971481499851507,
+          "p95": 33.98142884925618,
+          "p99": 43.53268637056313,
+          "max": 50.880639000752126
+        },
+        "prepare_ms": {
+          "p50": 20.930282499648456,
+          "p95": 26.17885630033925,
+          "p99": 39.86913196024033,
+          "max": 41.412250999201206
+        },
+        "imu_ms": {
+          "p50": 0.32356199972127797,
+          "p95": 0.38497030009239097,
+          "p99": 0.5357506793916397,
+          "max": 0.5946609999227803
+        },
+        "lio_ms": {
+          "p50": 105.16199350058741,
+          "p95": 165.49616504980804,
+          "p99": 198.46026508985224,
+          "max": 211.9852770010766
+        },
+        "map_ms": {
+          "p50": 1.3296514998728526,
+          "p95": 74.48027560103583,
+          "p99": 99.42064398988795,
+          "max": 115.68372200054
+        },
+        "grid_ms": {
+          "p50": 0.0,
+          "p95": 43.329070800609756,
+          "p99": 54.568967359791664,
+          "max": 62.75586400079192
+        },
+        "voxel_ms": {
+          "p50": 0.0,
+          "p95": 23.406196249652567,
+          "p99": 44.94856963063269,
+          "max": 71.17285599997558
+        },
+        "total_ms": {
+          "p50": 151.2984190003408,
+          "p95": 262.24150834877946,
+          "p99": 301.19064412017906,
+          "max": 305.58445200040296
+        }
+      }
+    },
+    "stop": "\u76f8\u90bb\u5904\u7406\u5e27\u65f6\u95f4\u8de8\u5ea6 1.200s \u8d85\u8fc7\u4e0a\u9650 1.000s\uff1b\u53ef\u80fd\u4e3a\u5904\u7406\u5ef6\u8fdf\u8df3\u5e27\u6216\u4f20\u611f\u5668\u95f4\u65ad\uff0c\u505c\u6b62\u5efa\u56fe\u5e76\u4fdd\u5b58\u5f53\u524d\u5730\u56fe",
+    "expected_stop": true,
+    "note": "The recorded 1.2 s gap is immutable; replay verifies unchanged evidence, not live acquisition performance."
+  },
+  "native_implementation": {
+    "path": "csrc/ray_native.cpp",
+    "api_version": 1,
+    "cpp_standard": 17,
+    "gil_released": true,
+    "extra_dependencies": [
+      "pybind11 (build only)"
+    ],
+    "runtime_dependencies": [
+      "C++ standard library"
+    ],
+    "algorithms": [
+      "stable grouped nearest-ray selection",
+      "2D integer raster traversal and bitset deduplication",
+      "3D interior sampling, stored-voxel lookup and return-neighbour protection"
+    ],
+    "state": "C++ membership cache mirrors Python insert/remove/clear; score and miss counters remain Python-owned",
+    "float_contract": "-ffp-contract=off; preserve NumPy arange increment and batch sample counts"
+  },
+  "hardware_accessed": false,
+  "live_validation": "Not run; measured offline on the same host with shared load",
+  "source_sha256": {
+    "/home/agi/robot_mapping/csrc/ray_native.cpp": "6456dc27810621349e3e6e1c7f55cf945015c9f5d19e6716bf2afb423b7f707f",
+    "/home/agi/robot_mapping/setup.py": "4d6c333523f744e7a6fa0189f41789d6a2226b01ff70dbc09722ef8397552bc4",
+    "/home/agi/robot_mapping/pyproject.toml": "2facfe6a0840198c5c216e805b45d217d6c61c871d0f4d7df5670e36914c77f2",
+    "/home/agi/robot_mapping/src/robot_mapping/core/ray_grid.py": "6a6114ff9b156fbfe93d054f88313424920affaf24d18408370be80065d6f752",
+    "/home/agi/robot_mapping/src/robot_mapping/core/ray_voxels.py": "a7003d039dfa678f9b9d102d4be5181ee2bc0332e01412bff6fe5db9571b3bd5",
+    "/home/agi/robot_mapping/src/robot_mapping/core/online_map.py": "652e1afd497e4cd2bb495e2f5b565cfa822e9f25ad1879c8fd862e1277a3ca0f",
+    "/home/agi/robot_mapping/src/robot_mapping/runtime/frontend.py": "b2bdda2bebda346f2ac64c389ea28f2f347ca02ad19218c1dcae843bf7ba3e2c",
+    "/home/agi/robot_mapping/src/robot_mapping/runtime/timing.py": "b07d1a2de0cfa49cd5cf7af245ee09512750c0a4574f1555376391647148bbb3",
+    "/home/agi/robot_mapping_gdk/scripts/run_g2.sh": "edb6ef12d3ca0ce63ce759ae74a01337a0c896fb7dbf8db81710f0d285d6163c",
+    "/home/agi/robot_mapping_gdk/src/robot_mapping_gdk/session.py": "32b36cf1f90e71f4c72b238598e30573c175b4a0d3df17dbc5ea9fa8304bbe54"
+  },
+  "isolated_core_wheel": "PASS",
+  "isolated_gdk_native_record_replay_save": "PASS",
+  "backup": "/home/agi/robot_mapping/build/native-rays-20261108/wheelhouse-before",
+  "restore": {
+    "archive": "/home/agi/robot_mapping/build/native-rays-20261108/runtime.tar.gz",
+    "sha256": "386c18f4e25f2b1d2814a92019bcf337ff14940b200819ee0bff1cff66b3e937",
+    "python": "/usr/bin/python3",
+    "hardware_accessed": false,
+    "restore": "PASS",
+    "repeated_install": "PASS",
+    "native_execution": "PASS",
+    "native_record_replay_save": "PASS",
+    "source_tree_required": false,
+    "shared_environment_required": false,
+    "network_required": false,
+    "pip_bytecode_precompilation": false,
+    "note": "Initial restore exhausted disk; rerun passed after deleting regenerable benchmark/test/bytecode files and using PIP_COMPILE=0."
+  },
+  "runtime_sync": {
+    "status": "PASS",
+    "path": "/home/agi/robot_mapping/.venv/lib/python3.10/site-packages",
+    "ray_backend": "/home/agi/robot_mapping/.venv/lib/python3.10/site-packages/robot_mapping/_ray_native.cpython-310-aarch64-linux-gnu.so",
+    "source_files_equal": 48,
+    "requirements_sha256": "701fbd0651c796ec3ade97b2e6f1a5be0238d3645640dd085547f6d4079b5547"
+  },
+  "recording": "/home/agi/robot_mapping_gdk/recordings/20261108-184747"
+}

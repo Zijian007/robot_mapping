@@ -1,0 +1,84 @@
+{
+  "scope": "Fixed-pose 3D voxel clearing; diagnostic PCDs only",
+  "parameters": {
+    "resolution": 0.15,
+    "clear_observations": 3,
+    "max_ray_range": 30.0,
+    "max_rays": 2048
+  },
+  "archive": "/home/agi/robot_mapping_gdk/comparisons/20261108-stationary-clearing/projection_observations.npz",
+  "archive_sha256": "6ef296ed8c100aeb304070c28153fbfb560c3114d3c54ee8cd6e97af5420dd9d",
+  "baseline_map": "/home/agi/robot_mapping_gdk/comparisons/20261108-stationary-clearing/maps/20261108_173845_569742/map_0000",
+  "baseline_pcd_sha256": "e34af14614fcc5b1841bbf97abb7991e3190fa6b48ab479648bbd48fadd064bc",
+  "implementation_sha256": "1b12adf4b784dd0ec2737591078fb736dc0ecd6c7c03202411e1823c1cec8819",
+  "keyframes": 83,
+  "observations": 270,
+  "before": 83776,
+  "after": 80748,
+  "removed": 3028,
+  "removal_events": 3190,
+  "added": 0,
+  "clearing_ms": {
+    "p50": 145.83523550027166,
+    "p95": 301.5758460509459
+  },
+  "limitations": [
+    "Removed voxels have repeated ray evidence; no human/static-object labels are available.",
+    "Unobserved or occluded residuals remain. Thin objects and pose errors may still cause false clearing.",
+    "Raw keyframes, 2D projection and FAST-LIO internal map are not edited by this tool."
+  ],
+  "date": "2026-11-08",
+  "validation": {
+    "tests_passed": 171,
+    "scopes": [
+      "robot_mapping/tests",
+      "robot_mapping_gdk/tests",
+      "fastlio2/tests"
+    ],
+    "synthetic_cases": [
+      "stationary clearing without new graph nodes",
+      "duplicate/invalid frames do not count",
+      "same-frame returns protect neighbouring voxels",
+      "low obstacles and tabletops survive rays at other heights",
+      "occlusion, rear origin and range limits",
+      "grazing rays do not clear",
+      "obstacle returns after removal",
+      "loop rebuild preserves chronological insertions",
+      "loop rebuild catches up stationary clearing",
+      "empty cleaned PCD saved with configuration and checksums"
+    ],
+    "timing_note": "Wall time per clearing update under shared machine load, not end-to-end CPU measurement",
+    "isolated_wheels": "PASS; SDK blocked, hardware not accessed"
+  },
+  "full_replay": {
+    "new_map": "/home/agi/robot_mapping_gdk/comparisons/20261108-voxel-session/maps/20261108_180453_537576/map_0000",
+    "status": {
+      "session_id": "20261108_180453_537576",
+      "state": "STOPPED",
+      "running": false,
+      "finished": true,
+      "error": null,
+      "frames": 1294,
+      "skipped_frames": 0,
+      "lio_status": "scan_to_map",
+      "match_failures": 0,
+      "consecutive_match_failures": 0,
+      "body_removed": 126222,
+      "map": {
+        "keyframes": 83,
+        "voxels": 80749,
+        "occupied_cells": 17348,
+        "free_cells": 39826,
+        "last_ingest_ms": 199.5787370015023,
+        "loops": 1,
+        "grid_observations": 270,
+        "removed_voxels": 3189
+      },
+      "unsaved": false,
+      "last_saved": "/home/agi/robot_mapping_gdk/comparisons/20261108-voxel-session/maps/20261108_180453_537576/map_0000"
+    },
+    "wall_s": 307.19528060599987,
+    "point_count": 80749,
+    "artifact_hashes_verified": true
+  }
+}

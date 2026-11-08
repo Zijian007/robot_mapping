@@ -1,0 +1,76 @@
+{
+  "scope": "Same observations and poses; discrete height coverage, no semantic ground truth",
+  "archive": "/home/agi/robot_mapping_gdk/comparisons/20261108-stationary-clearing/projection_observations.npz",
+  "archive_sha256": "6ef296ed8c100aeb304070c28153fbfb560c3114d3c54ee8cd6e97af5420dd9d",
+  "baseline_map": "/home/agi/robot_mapping_gdk/comparisons/20261108-stationary-clearing/maps/20261108_173845_569742/map_0000",
+  "baseline_grid_sha256": "6283a693b879dccbbc28db08e92e46fd3e6e6a74839576027ba6c10f0433e550",
+  "implementation_sha256": "5567e81b102b573a4ab7ef568d48c8fb65452571b4a77f1f5eeac4425c877e92",
+  "observations": 270,
+  "height_bins": 11,
+  "height_bounds": {
+    "configured_reference": "initial_imu",
+    "resolved_reference": "map",
+    "min": 0.06912195711488639,
+    "max": 2.1191219571148863
+  },
+  "before": {
+    "unknown": 965075,
+    "free": 248750,
+    "occupied": 17350
+  },
+  "after": {
+    "unknown": 1173999,
+    "free": 39826,
+    "occupied": 17350
+  },
+  "transitions": {
+    "unknown": {
+      "unknown": 965075,
+      "free": 0,
+      "occupied": 0
+    },
+    "free": {
+      "unknown": 208924,
+      "free": 39826,
+      "occupied": 0
+    },
+    "occupied": {
+      "unknown": 0,
+      "free": 0,
+      "occupied": 17350
+    }
+  },
+  "occupied_mask_identical": true,
+  "new_free_cells": 0,
+  "projection_ms": {
+    "p50": 61.14438349959528,
+    "p95": 100.69424290095412
+  },
+  "limitations": [
+    "Retained occupied cells are not independently labelled static objects.",
+    "Free-to-unknown cells lack required evidence; they are not confirmed obstacles.",
+    "Each height bin is only sampled; thin objects, blind spots and out-of-band obstacles remain possible.",
+    "Current robot footprint still uses a free-space prior unless positive evidence exists.",
+    "3D PCD, LIO estimates and localization accuracy are not evaluated or changed."
+  ],
+  "date": "2026-11-08",
+  "validation": {
+    "tests_passed": 160,
+    "scopes": [
+      "robot_mapping/tests",
+      "robot_mapping_gdk/tests",
+      "fastlio2/tests"
+    ],
+    "synthetic_cases": [
+      "partially observed column stays unknown",
+      "all bins including partial top bin required",
+      "low obstacle survives higher rays",
+      "tabletop survives lower rays",
+      "foreground return does not clear occluded obstacle",
+      "footprint preserves single-hit candidates",
+      "stationary clearing and loop rebuild consistency"
+    ],
+    "ground_truth": "Synthetic geometry only; real recording has no object labels"
+  },
+  "comparison_image": "/home/agi/robot_mapping_gdk/comparisons/20261108-column-coverage/comparison.png"
+}

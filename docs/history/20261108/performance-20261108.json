@@ -1,0 +1,289 @@
+{
+  "date": "2026-11-08",
+  "scope": "Read-only diagnosis of live mapping frame-gap stop; offline profiling and fixed-observation comparisons",
+  "recording": "/home/agi/robot_mapping_gdk/recordings/20261108-184747",
+  "hardware_accessed": false,
+  "production_code_or_configuration_changed": false,
+  "trigger": {
+    "configured_gap_s": 1.0,
+    "recorded_gap_s": 1.2,
+    "recorded_read_interval_s": 1.259,
+    "preceding_handle_ms": 618.0,
+    "preceding_ingest_ms": 600.8294289986225
+  },
+  "replay_comparison": {
+    "baseline": {
+      "wall_s": 11.712549447000129,
+      "timings": {
+        "ReplaySource.next_lidar": {
+          "calls": 61,
+          "wall_p50_ms": 18.502692999391,
+          "wall_p95_ms": 22.770671001126175,
+          "wall_total_ms": 1180.6808620021911,
+          "thread_cpu_total_ms": 1105.9162329999995
+        },
+        "MappingFrontend._filter_scan": {
+          "calls": 117,
+          "wall_p50_ms": 8.150525000019115,
+          "wall_p95_ms": 9.015120599724469,
+          "wall_total_ms": 974.2416539920669,
+          "thread_cpu_total_ms": 948.1386490000036
+        },
+        "MappingFrontend._read_imu": {
+          "calls": 60,
+          "wall_p50_ms": 0.30183099988789763,
+          "wall_p95_ms": 0.3523352503179922,
+          "wall_total_ms": 18.040455999653204,
+          "thread_cpu_total_ms": 17.87222699999856
+        },
+        "FastLIO2.process": {
+          "calls": 60,
+          "wall_p50_ms": 94.34018499996455,
+          "wall_p95_ms": 128.24312204966182,
+          "wall_total_ms": 5326.375986993298,
+          "thread_cpu_total_ms": 3855.788859000003
+        },
+        "RayOccupancy2D.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 94.63505350049672,
+          "wall_p95_ms": 109.61132440043002,
+          "wall_total_ms": 1070.2080150040274,
+          "thread_cpu_total_ms": 708.9621360000011
+        },
+        "RayVoxelHash.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 121.33723500028282,
+          "wall_p95_ms": 132.75302075062427,
+          "wall_total_ms": 1467.4399650011765,
+          "thread_cpu_total_ms": 1404.0063939999998
+        },
+        "OnlineMap.ingest_odom": {
+          "calls": 50,
+          "wall_p50_ms": 1.3018240006203996,
+          "wall_p95_ms": 302.2373251998033,
+          "wall_total_ms": 3303.6819029985054,
+          "thread_cpu_total_ms": 2475.087346999999
+        }
+      }
+    },
+    "blas1": {
+      "wall_s": 10.485974777999218,
+      "timings": {
+        "ReplaySource.next_lidar": {
+          "calls": 61,
+          "wall_p50_ms": 18.7008880002395,
+          "wall_p95_ms": 22.326125999825308,
+          "wall_total_ms": 1145.5532659892924,
+          "thread_cpu_total_ms": 1110.983448000001
+        },
+        "MappingFrontend._filter_scan": {
+          "calls": 117,
+          "wall_p50_ms": 8.16460300120525,
+          "wall_p95_ms": 9.279701600098631,
+          "wall_total_ms": 976.1494549911731,
+          "thread_cpu_total_ms": 944.7340800000017
+        },
+        "MappingFrontend._read_imu": {
+          "calls": 60,
+          "wall_p50_ms": 0.2967730006275815,
+          "wall_p95_ms": 0.3615220005485753,
+          "wall_total_ms": 18.574351010101964,
+          "thread_cpu_total_ms": 18.078569000001085
+        },
+        "FastLIO2.process": {
+          "calls": 60,
+          "wall_p50_ms": 97.68534200065915,
+          "wall_p95_ms": 122.909539200009,
+          "wall_total_ms": 5291.22005300087,
+          "thread_cpu_total_ms": 3877.9441630000038
+        },
+        "RayOccupancy2D.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 56.63574949994654,
+          "wall_p95_ms": 72.42903469978046,
+          "wall_total_ms": 720.9182460028387,
+          "thread_cpu_total_ms": 698.9557300000008
+        },
+        "RayVoxelHash.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 118.46994949974032,
+          "wall_p95_ms": 129.65204704978532,
+          "wall_total_ms": 1436.4572689974011,
+          "thread_cpu_total_ms": 1402.1336110000007
+        },
+        "OnlineMap.ingest_odom": {
+          "calls": 50,
+          "wall_p50_ms": 1.3012475001232815,
+          "wall_p95_ms": 187.19991229900188,
+          "wall_total_ms": 2306.7457689903677,
+          "thread_cpu_total_ms": 2239.2985409999983
+        }
+      }
+    },
+    "threads1": {
+      "wall_s": 12.548568559999694,
+      "timings": {
+        "ReplaySource.next_lidar": {
+          "calls": 61,
+          "wall_p50_ms": 18.634003999977722,
+          "wall_p95_ms": 22.741785000107484,
+          "wall_total_ms": 1159.6149139986665,
+          "thread_cpu_total_ms": 1113.358539000004
+        },
+        "MappingFrontend._filter_scan": {
+          "calls": 117,
+          "wall_p50_ms": 8.133255998473032,
+          "wall_p95_ms": 8.96915860030276,
+          "wall_total_ms": 990.2971269912086,
+          "thread_cpu_total_ms": 946.8641950000039
+        },
+        "MappingFrontend._read_imu": {
+          "calls": 60,
+          "wall_p50_ms": 0.3009075007867068,
+          "wall_p95_ms": 0.35646200076371315,
+          "wall_total_ms": 18.056381992209936,
+          "thread_cpu_total_ms": 17.927761999996473
+        },
+        "FastLIO2.process": {
+          "calls": 60,
+          "wall_p50_ms": 139.68933150044904,
+          "wall_p95_ms": 161.8264304999684,
+          "wall_total_ms": 7273.509441005444,
+          "thread_cpu_total_ms": 6952.287859000001
+        },
+        "RayOccupancy2D.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 57.23256449891778,
+          "wall_p95_ms": 72.9985454000598,
+          "wall_total_ms": 721.9397969965939,
+          "thread_cpu_total_ms": 701.3588040000009
+        },
+        "RayVoxelHash.ingest_rays": {
+          "calls": 12,
+          "wall_p50_ms": 117.9492310002388,
+          "wall_p95_ms": 153.83879335013262,
+          "wall_total_ms": 1493.1285950005986,
+          "thread_cpu_total_ms": 1407.7846099999992
+        },
+        "OnlineMap.ingest_odom": {
+          "calls": 50,
+          "wall_p50_ms": 1.3180744999772287,
+          "wall_p95_ms": 203.2543753997742,
+          "wall_total_ms": 2355.078341999615,
+          "thread_cpu_total_ms": 2246.180211999995
+        }
+      }
+    }
+  },
+  "projection_comparison": {
+    "projection_before3d": {
+      "transform_ms": {
+        "p50": 1.777099500031909,
+        "p95": 20.243686249614257
+      },
+      "grid_ms": {
+        "p50": 62.67226800082426,
+        "p95": 77.6947539993671
+      },
+      "voxels_ms": {
+        "p50": 0.002211500941484701,
+        "p95": 0.00278899915429065
+      },
+      "total_ms": {
+        "p50": 64.55717600056232,
+        "p95": 84.7959972497847
+      },
+      "cpu_ms": {
+        "p50": 58.74001550000002,
+        "p95": 82.07543049999992
+      }
+    },
+    "projection_beforecleanup": {
+      "transform_ms": {
+        "p50": 1.936081500389264,
+        "p95": 34.9708522498986
+      },
+      "grid_ms": {
+        "p50": 64.8541025002487,
+        "p95": 100.8938244995079
+      },
+      "voxels_ms": {
+        "p50": 133.47079100003612,
+        "p95": 206.56744000098115
+      },
+      "total_ms": {
+        "p50": 196.05251949997182,
+        "p95": 297.8652212491397
+      },
+      "cpu_ms": {
+        "p50": 179.36787149999978,
+        "p95": 217.0272072499998
+      }
+    },
+    "projection_current": {
+      "transform_ms": {
+        "p50": 1.8364265006312053,
+        "p95": 32.2581642494697
+      },
+      "grid_ms": {
+        "p50": 59.40589999954682,
+        "p95": 80.73303324954395
+      },
+      "voxels_ms": {
+        "p50": 123.57524399976683,
+        "p95": 168.33466225079974
+      },
+      "total_ms": {
+        "p50": 185.99622049987374,
+        "p95": 243.43769150027583
+      },
+      "cpu_ms": {
+        "p50": 176.2883595000002,
+        "p95": 210.92920250000068
+      }
+    },
+    "projection_default": {
+      "transform_ms": {
+        "p50": 3.4823134992620908,
+        "p95": 66.23701425087347
+      },
+      "grid_ms": {
+        "p50": 59.81928950041038,
+        "p95": 105.14331025024148
+      },
+      "voxels_ms": {
+        "p50": 121.79856749935425,
+        "p95": 143.75073725113907
+      },
+      "total_ms": {
+        "p50": 189.70795900077064,
+        "p95": 294.4218890002048
+      },
+      "cpu_ms": {
+        "p50": 176.5212319999999,
+        "p95": 217.4957475000001
+      }
+    }
+  },
+  "method": [
+    "All replay variants use the same 61 recorded inputs, process 60, and stop on the existing recorded timestamp gap. This is not a measurement of fresh live frame loss.",
+    "Replay uses saved TF/IMU with preview and warmup disabled; SDK acquisition, recording compression and HTTP clients are not reproduced.",
+    "baseline uses default OpenBLAS and OpenMP pools (4 threads each in this execution affinity); blas1 limits only OpenBLAS to 1; threads1 limits both to 1.",
+    "Fixed-observation benchmark replays 12 observations three times with identical poses, rays and map height bounds; before3d and beforecleanup load archived wheel code; OpenBLAS is 1 except projection_default.",
+    "Projection comparison measures shared transform + grid + voxel kernels, not every historical OnlineMap orchestration detail.",
+    "Times vary with shared host load; no CPU telemetry from the original incident is available. Current execution affinity is CPUs 20-23, not necessarily the original shell affinity."
+  ],
+  "findings": [
+    "3D ray clearing adds approximately 120 ms per observation in these measurements and runs synchronously in the acquisition/LIO loop.",
+    "Current ray_voxels and URDF filter match the pre-cleanup archive; current frontend matches pre-3D archive. Latest backend cleanup changes capability checks at construction, not per-frame LIO configuration.",
+    "NumPy/OpenBLAS parallel overhead increases mapping latency in this small-matrix workload; limiting FAST-LIO OpenMP to one thread instead slows its process step.",
+    "Native matched-frame gap and actual LiDAR stream interruption are conflated by the error wording.",
+    "Current native backend source has no automatic 1-second-gap origin reset in process_native; the error explanation about origin reset is stale, not evidence that a reset occurred."
+  ],
+  "recommended_next_steps": [
+    "Optimize 3D ray sampling/deduplication and 2D traversal without changing evidence semantics",
+    "Use separately bounded NumPy/OpenBLAS threading; preserve useful native LIO parallelism",
+    "Measure live per-stage time and acquisition lag under the actual launcher environment; distinguish processing gaps from no-data timeouts"
+  ],
+  "artifacts": "/home/agi/robot_mapping/build/perf-20261108"
+}

@@ -18,12 +18,12 @@ robot_mapping/
 bash scripts/install_runtime.sh
 bash run.sh doctor --native --loop
 bash ../robot_mapping_gdk/scripts/run_g2.sh
-python -m robot_mapping_gdk replay /path/to/recording --maps-root ./maps
+.venv/bin/python -m robot_mapping_gdk replay /path/to/recording --maps-root ./maps
 ```
 
 无需为 GTSAM/VGICP 设置 PYTHONPATH 或 LD_LIBRARY_PATH。安装器清除继承的这些变量，创建不继承系统 site-packages 的 venv，使用 `--no-index --require-hashes` 安装。校验 Python ABI、CPU 架构、libc 和每个 wheel 摘要；遇到已有非托管目录拒绝修改。相同依赖锁重复安装只做验证，失败环境不会被启动入口当作就绪环境。
 
-默认路径为本项目 `.venv`。可用 `--venv /path/to/env` 安装到其他位置，运行时设 `MAPPING_VENV=/path/to/env`。脚本不修改共用 `/home/agi/.venv`。旧 `/home/agi/move_odom/tools/mapping/.third_party` 已删除，当前启动和安装均不依赖它。历史恢复包及源码快照位于 `/data/robot_mapping-backups/`；该目录只用于回退，不参与运行。
+默认路径为本项目 `.venv`。可用 `--venv /path/to/env` 安装到其他位置，运行时设 `MAPPING_VENV=/path/to/env`。脚本不修改共用环境。运行只依赖选定的环境和 wheelhouse，不读取迁移归档或源码构建备份。
 
 GDK SDK 未包含在依赖集中。需要在线使用时，先配置 SDK 的动态库环境；可用 `MAPPING_SDK_PYTHONPATH=/path/to/sdk/python` 显式提供 SDK 模块路径。新入口不继承普通 PYTHONPATH，以免误加载其他工程的 NumPy 或原生扩展。
 
@@ -57,6 +57,7 @@ bash run.sh doctor --native --loop
 当前 wheelhouse 对应 `robot_mapping 0.4.0` 和 `robot_mapping_gdk 0.2.0`，包含独立的 FAST-LIO2、pygicp 和 GTSAM 原生 wheel，不包含 grid_icp。
 
 - FAST-LIO2：从独立 `/home/agi/fastlio2` 项目编译 Python 绑定及 C++ 后端。
+- 射线清理：从本包 `csrc/ray_native.cpp` 编译 `_ray_native`，包含在 `robot_mapping` 的平台 wheel 中；仅需要 C++17 和 pybind11，不依赖 FAST-LIO/PCL。
 - FastVGICP：从固定 commit 的 fast_gicp 源码编译，包含释放 GIL 和暴露收敛状态的绑定补丁；Python 导入名为 `pygicp`。
 - GTSAM：从 4.2.2 源码编译 C++ 库和 Python 绑定。
 
@@ -64,7 +65,7 @@ bash run.sh doctor --native --loop
 
 ## 重新构建和导出
 
-本次首次迁移显式读取已验证的本地安装来导出二进制，输入目录只作为一次性 bootstrap 和审计来源，后续安装及运行不需要它。
+导出工具读取已验证的本地构建来生成二进制包。输入目录只用于构建和来源记录，后续安装及运行不需要它。
 
 常规依赖更新可在本包内构建，构建目录默认 `build/native`：
 
@@ -101,3 +102,7 @@ bash scripts/install_runtime.sh --wheelhouse ./wheelhouse-new
 ```
 
 验证器阻止 SDK/上层应用导入，检查模块路径、NumPy 版本、FAST-LIO2 帧点云接口、实际 VGICP 配准和 GTSAM 优化，并检查 `/proc/self/maps` 中实际加载的自有动态库都属于该 venv。单看 import 成功不足以确认迁移完成。
+
+受管理的运行环境还要求 C++ 射线内核加载成功，并实际执行三次观测清理。
+`doctor` 的 `ray_backend` 应为 `cpp`。G2 启动入口固定 `OPENBLAS_NUM_THREADS=1`，
+避免 NumPy 小矩阵运算与原生算法争用计算资源；不修改 FAST-LIO 的 OpenMP 线程数。

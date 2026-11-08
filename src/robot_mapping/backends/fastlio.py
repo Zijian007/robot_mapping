@@ -28,7 +28,7 @@ def prepare_scan(scan: LidarScan, blind: float):
 
 def create_backend(settings, imu_from_lidar):
     from .capabilities import load_fastlio2
-    fastlio2 = load_fastlio2()
+    fastlio2 = load_fastlio2(require_rays=settings.grid_ray_clearing)
 
     mapping = {
         "scan_match_stride": 1,
@@ -42,6 +42,7 @@ def create_backend(settings, imu_from_lidar):
         "plane_fit_mode": settings.plane_fit_mode,
         "extrinsic_est_en": False,
         "export_scan_points": True,
+        "export_grid_rays": settings.grid_ray_clearing,
     }
     config = fastlio2.FastLIO2Config(
         blind=settings.blind,

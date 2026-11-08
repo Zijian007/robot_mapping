@@ -11,7 +11,7 @@ from scipy.spatial import cKDTree
 
 from robot_mapping.core.pose_math import is_se3, relative_se3, se3_rotation_angle, se3_translation_norm, transform_points
 from .capabilities import load_pygicp
-from .loop_types import LoopConfig, LoopMatch, LoopSnapshot
+from .loop_types import LoopConfig, LoopMatch
 
 
 AlignmentResult = tuple[np.ndarray, bool, float]
@@ -73,10 +73,6 @@ def overlap_metrics(source, target, transform, max_dist):
     hits = int(valid.sum())
     rmse = float(np.sqrt(np.mean(distances[valid] ** 2))) if hits else math.inf
     return hits / len(points), rmse, hits
-
-
-def estimate_inlier_ratio(source_pts, target_pts, T_target_source, max_dist):
-    return overlap_metrics(source_pts, target_pts, T_target_source, max_dist)[0]
 
 
 class AsyncLoopWorker:
