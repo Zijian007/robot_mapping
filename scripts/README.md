@@ -14,6 +14,9 @@
 | 验证单个算法 wheel | `verify_wheel.py` |
 | 验证已安装运行环境 | `verify_runtime.py` |
 | 验证完整离线恢复包 | `verify_restore.py` |
+| 固定观测的体素存储对比 | `benchmark_voxels.py`，见 [原生体素存储](../docs/native-voxels.md) |
+| 固定观测的 2D 栅格对比与阶段测量 | `benchmark_grid.py`，见 [融合栅格更新](../docs/native-grid.md) |
+| 录包点云准备、本体过滤与双雷达合并对比 | `benchmark_preprocess.py`，见 [原生点云预处理](../docs/native-preprocess.md) |
 
 安装流程见 [运行环境说明](../docs/runtime.md)，源码与 wheel 验证见
 [开发指南](../docs/development.md)。一次性实验脚本保存在本机

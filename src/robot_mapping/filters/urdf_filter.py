@@ -14,9 +14,27 @@ from typing import Callable
 import xml.etree.ElementTree as ET
 
 import numpy as np
+from robot_mapping.backends.ray_native import kernels
 
 from robot_mapping.core.pose_math import invert_se3
 from robot_mapping.filters.body_filter import MissingBodyTransform
+
+_NUMPY_WEAK_SCALARS = np.__version__.startswith("1.")
+
+
+def _valid_transform(mat: np.ndarray) -> bool:
+    """Use the original URDF filter tolerances, including short-circuit order."""
+    if kernels is not None:
+        if not kernels.rigid_structure_valid(mat):
+            return False
+        rotation = mat[:3, :3]
+        if not kernels.rigid_gram_valid(rotation.T @ rotation):
+            return False
+        return kernels.rigid_determinant_valid(np.linalg.det(rotation))
+    return (mat.shape == (4, 4) and bool(np.isfinite(mat).all())
+            and bool(np.allclose(mat[3], [0, 0, 0, 1]))
+            and bool(np.allclose(mat[:3, :3].T @ mat[:3, :3], np.eye(3), atol=1e-5))
+            and bool(np.isclose(np.linalg.det(mat[:3, :3]), 1, atol=1e-5)))
 
 
 def _vector(text: str | None, default: str = "0 0 0") -> np.ndarray:
@@ -152,10 +170,7 @@ class UrdfBodyFilter:
             if bound.frame not in transforms:
                 try:
                     mat = np.asarray(lookup(self.base_frame, bound.frame, timestamp_ns), dtype=np.float64)
-                    if (mat.shape != (4, 4) or not np.isfinite(mat).all()
-                            or not np.allclose(mat[3], [0, 0, 0, 1])
-                            or not np.allclose(mat[:3, :3].T @ mat[:3, :3], np.eye(3), atol=1e-5)
-                            or not np.isclose(np.linalg.det(mat[:3, :3]), 1, atol=1e-5)):
+                    if not _valid_transform(mat):
                         raise ValueError("invalid SE3")
                     transforms[bound.frame] = mat
                 except Exception as exc:
@@ -163,6 +178,9 @@ class UrdfBodyFilter:
             pose = lidar_from_base @ transforms[bound.frame]
             corners = bound.corners @ pose[:3, :3].T + pose[:3, 3]
             boxes.append((corners.min(axis=0), corners.max(axis=0)))
+        if kernels is not None and points.dtype in (np.dtype('float32'), np.dtype('float64')):
+            return kernels.filter_aabbs(points, np.asarray(boxes, dtype=np.float64).reshape(-1, 2, 3),
+                                        _NUMPY_WEAK_SCALARS)
         # Repeated per-link comparisons should traverse contiguous coordinate
         # arrays rather than stride through intensity/time fields each time.
         x, y, z = np.ascontiguousarray(points[:, :3].T)

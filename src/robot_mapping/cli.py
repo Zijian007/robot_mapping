@@ -40,6 +40,11 @@ def main(argv=None):
     ok = True
     from .backends.ray_native import kernels
     report["ray_backend"] = "cpp" if kernels is not None else "numpy"
+    report["voxel_backend"] = "cpp" if kernels is not None else "python"
+    report["grid_backend"] = "cpp" if kernels is not None else "numpy"
+    report["preprocess_backend"] = "cpp" if kernels is not None else "numpy"
+    report["body_tf_validation"] = "cpp" if kernels is not None else "numpy"
+    report["ray_native_api"] = kernels.API_VERSION if kernels is not None else None
     if args.native:
         from .backends.capabilities import fastlio2_available
         report["fastlio2_scan_export"] = fastlio2_available()

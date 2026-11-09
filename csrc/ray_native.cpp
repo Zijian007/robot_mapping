@@ -103,18 +103,17 @@ struct VoxelIndex {
   }
 };
 
-py::tuple voxel_evidence(Floats rays, Floats selected, Floats lengths,
-                         VoxelIndex& index, py::dict misses, double resolution, double max_range) {
+using Evidence = std::pair<std::vector<Key>, std::vector<Key>>;
+Evidence collect_voxel_evidence(const Floats& rays, const Floats& selected, const Floats& lengths,
+                         const VoxelIndex& index, const std::vector<Key>& miss_keys,
+                         double resolution, double max_range) {
   if (rays.ndim()!=2 || rays.shape(1)!=6 || selected.ndim()!=2 || selected.shape(1)!=6 ||
       lengths.ndim()!=1 || lengths.shape(0)!=selected.shape(0) ||
       !std::isfinite(resolution) || resolution<=0 || !std::isfinite(max_range) || max_range<=0)
     throw std::invalid_argument("invalid voxel ray kernel arguments");
-  std::vector<Key> miss_keys, reset, crossed;
-  for (auto item : misses) miss_keys.push_back(read_key(item.first));
+  std::vector<Key> reset, crossed;
   auto r=rays.unchecked<2>(); auto s=selected.unchecked<2>(); auto len=lengths.unchecked<1>();
   {
-    py::gil_scoped_release release;
-    std::lock_guard<std::mutex> lock(index.mutex);
     const double inv=1./resolution;
     Keys hits, visited;
     hits.reserve(r.shape(0));
@@ -157,8 +156,120 @@ py::tuple voxel_evidence(Floats rays, Floats selected, Floats lengths,
     for (const auto& key : visited) if (!protected_key(key)) crossed.push_back(key);
     std::sort(reset.begin(),reset.end()); std::sort(crossed.begin(),crossed.end());
   }
-  return py::make_tuple(key_array(reset),key_array(crossed));
+  return {std::move(reset), std::move(crossed)};
 }
+
+py::tuple voxel_evidence(Floats rays, Floats selected, Floats lengths,
+                         VoxelIndex& index, py::dict misses, double resolution, double max_range) {
+  std::vector<Key> miss_keys;
+  for (auto item : misses) miss_keys.push_back(read_key(item.first));
+  Evidence evidence;
+  {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(index.mutex);
+    evidence = collect_voxel_evidence(rays, selected, lengths, index, miss_keys, resolution, max_range);
+  }
+  return py::make_tuple(key_array(evidence.first), key_array(evidence.second));
+}
+
+// Own persistent geometry and clearing evidence in one place. Python only
+// receives new centers or explicit diagnostic snapshots, never per-cell work.
+struct VoxelStore : VoxelIndex {
+  const double resolution, inv;
+  std::unordered_map<Key, I, Hash> misses;
+  I removed = 0;
+
+  explicit VoxelStore(double value) : resolution(value), inv(1./value) {
+    if (!std::isfinite(value) || value <= 0 || !std::isfinite(inv))
+      throw std::invalid_argument("voxel resolution must be finite and positive");
+  }
+
+  py::array_t<float> centers(const std::vector<Key>& keys, bool insertion) const {
+    py::array_t<float> result({static_cast<py::ssize_t>(keys.size()), py::ssize_t(3)});
+    auto out = result.mutable_unchecked<2>();
+    {
+      py::gil_scoped_release release;
+      for (std::size_t i=0; i<keys.size(); ++i) for (int j=0; j<3; ++j) {
+        // Preserve both existing public methods' arithmetic at cell boundaries.
+        out(i,j) = insertion ? keys[i][j]*resolution + .5*resolution
+                             : (static_cast<double>(keys[i][j])+.5)*resolution;
+      }
+    }
+    return result;
+  }
+
+  py::array_t<float> add_points(Floats points) {
+    if (points.ndim()!=2 || points.shape(1)<3)
+      throw std::invalid_argument("points must be (N, >=3)");
+    auto data = points.unchecked<2>();
+    std::vector<Key> keys, added;
+    {
+      py::gil_scoped_release release;
+      // Validate and quantize the whole batch before mutating persistent state.
+      // Float32 inputs are promoted just as in WorldVoxelHash's NumPy path.
+      keys.reserve(data.shape(0));
+      for (py::ssize_t i=0; i<data.shape(0); ++i)
+        keys.push_back({floor_index(data(i,0)*inv), floor_index(data(i,1)*inv), floor_index(data(i,2)*inv)});
+      std::lock_guard<std::mutex> lock(mutex);
+      for (const auto& key : keys) {
+        if (cells.insert(key).second) added.push_back(key);
+        misses.erase(key);  // Every new observation is positive evidence.
+      }
+    }
+    return centers(added, true);
+  }
+
+  std::vector<Key> snapshot() {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(mutex);
+    return {cells.begin(), cells.end()};
+  }
+  py::array_t<I> keys() { return key_array(snapshot()); }
+  py::array_t<float> points_array() { return centers(snapshot(), false); }
+  py::dict miss_snapshot() {
+    std::vector<std::pair<Key,I>> values;
+    {
+      py::gil_scoped_release release;
+      std::lock_guard<std::mutex> lock(mutex);
+      values.assign(misses.begin(), misses.end());
+    }
+    py::dict result;
+    for (const auto& item : values)
+      result[py::make_tuple(item.first[0], item.first[1], item.first[2])] = item.second;
+    return result;
+  }
+  std::size_t size() {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(mutex);
+    return cells.size();
+  }
+  I removed_voxels() {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(mutex);
+    return removed;
+  }
+  void clear() {
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(mutex);
+    cells.clear(); misses.clear(); removed = 0;
+  }
+  void ingest_rays(Floats rays, Floats selected, Floats lengths, double max_range, I threshold) {
+    if (threshold < 2) throw std::invalid_argument("3D clearing requires at least two observations");
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock(mutex);
+    std::vector<Key> miss_keys;
+    miss_keys.reserve(misses.size());
+    for (const auto& item : misses) miss_keys.push_back(item.first);
+    const auto evidence = collect_voxel_evidence(rays, selected, lengths, *this, miss_keys, resolution, max_range);
+    for (const auto& key : evidence.first) misses.erase(key);
+    for (const auto& key : evidence.second) {
+      auto& count = misses[key];
+      if (++count >= threshold) {
+        cells.erase(key); misses.erase(key); ++removed;
+      }
+    }
+  }
+};
 
 I floor_div(I a,I b) { I q=a/b; return q-((a%b)<0); }
 py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_height,
@@ -203,15 +314,42 @@ py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_h
   return result;
 }
 
+#include "grid_update.hpp"
+#include "point_preprocess.hpp"
+
 PYBIND11_MODULE(_ray_native,m) {
-  m.doc()="Ray evidence kernels with GIL-free traversal and cached voxel membership";
-  m.attr("API_VERSION")=1;
+  m.doc()="GIL-free ray kernels and persistent voxel storage";
+  m.attr("API_VERSION")=5;
   py::class_<VoxelIndex>(m,"VoxelIndex")
       .def(py::init<>())
       .def("add",[](VoxelIndex& index,Ints keys){index.change(keys,true);})
       .def("erase",[](VoxelIndex& index,Ints keys){index.change(keys,false);})
       .def("clear",&VoxelIndex::clear);
+  py::class_<VoxelStore>(m,"VoxelStore")
+      .def(py::init<double>())
+      .def("add_points",&VoxelStore::add_points)
+      .def("points_array",&VoxelStore::points_array)
+      .def("keys",&VoxelStore::keys)
+      .def("misses",&VoxelStore::miss_snapshot)
+      .def_property_readonly("size",&VoxelStore::size)
+      .def_property_readonly("removed_voxels",&VoxelStore::removed_voxels)
+      .def("ingest_rays",&VoxelStore::ingest_rays)
+      .def("clear",&VoxelStore::clear);
   m.def("voxel_evidence",&voxel_evidence);
   m.def("grid_free_keys",&grid_free_keys);
   m.def("select_grouped",&select_grouped);
+  m.def("rigid_structure_valid",&rigid_structure_valid);
+  m.def("rigid_gram_valid",&rigid_gram_valid);
+  m.def("rigid_determinant_valid",&rigid_determinant_valid);
+  m.def("prepare_points",&prepare_points,py::arg("xyz").noconvert(),py::arg("intensity").noconvert(),
+        py::arg("offsets").noconvert(),py::arg("blind_squared"),py::arg("include_origins"));
+  m.def("filter_aabbs",&filter_aabbs,py::arg("points"),py::arg("boxes"),py::arg("weak_scalars")=true);
+  m.def("merge_prepared",&merge_prepared,py::arg("front").noconvert(),py::arg("back").noconvert(),
+        py::arg("xyz"),py::arg("origins"),py::arg("dt_ms"),py::arg("end_ms"));
+  m.def("grid_update",&grid_update, py::arg("rays"), py::arg("distances"), py::arg("groups"),
+        py::arg("scores").noconvert(), py::arg("values").noconvert(),
+        py::arg("origin_x"), py::arg("origin_y"), py::arg("resolution"),
+        py::arg("min_height"), py::arg("max_height"), py::arg("height_resolution"),
+        py::arg("max_range"), py::arg("max_rays"), py::arg("free_radius"),
+        py::arg("previous"), py::arg("current"));
 }

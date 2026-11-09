@@ -12,6 +12,7 @@ import numpy as np
 
 from robot_mapping.ports import LioBackend, LioResult, SensorSource
 from robot_mapping.backends.fastlio import BackendScan, prepare_scan
+from robot_mapping.backends.ray_native import kernels
 
 
 from robot_mapping.filters.body_filter import (
@@ -20,6 +21,7 @@ from robot_mapping.filters.body_filter import (
     filter_points_array,
     lidar_b_to_lidar_a_rt,
     transform_points_array,
+    transform_xyz,
 )
 from robot_mapping.config import MappingSettings
 from robot_mapping.core.online_map import OnlineMap
@@ -76,26 +78,37 @@ def merge_back_into_front(
     rotation_fb, translation_fb = lidar_b_to_lidar_a_rt(
         rotation_front, translation_front, rotation_back, translation_back
     )
-    back_in_front = transform_points_array(back_arr, rotation_fb, translation_fb)
-    if back_arr.shape[1] >= 8:
-        back_in_front[:, 5:8] = back_arr[:, 5:8] @ rotation_fb.T + translation_fb
     dt_ms = (float(back_scan.frame_stamp) - float(front_scan.frame_stamp)) * 1000.0
-    back_in_front[:, 4] += np.float32(dt_ms)
     # Keep actual capture times inside the primary scan's IMU interval. Clipping
     # times to the boundary gives out-of-window returns a fictitious pose.
     end_ms = float(front_scan.scan_duration_s) * 1000.0
     if max_scan_duration_s > 0.0:
         end_ms = min(end_ms, max_scan_duration_s * 1000.0)
-    in_window = ((back_in_front[:, 4] >= 0.) & (back_in_front[:, 4] <= end_ms))
-    time_removed = int(np.count_nonzero(~in_window))
-    back_in_front = back_in_front[in_window]
-    if len(back_in_front) == 0:
-        return front_scan, body_removed, 0
     front_arr = front_scan.points_array
-    if len(front_arr) == 0:
-        merged = back_in_front
+    if (kernels is not None and front_arr.dtype == back_arr.dtype == np.float32
+            and front_arr.shape[1] == back_arr.shape[1]
+            and np.isfinite(end_ms) and abs(end_ms) < 3.4e38):
+        # Preserve NumPy's matrix arithmetic, but compact time-valid back points
+        # directly into the final buffer instead of copying entire scans twice.
+        xyz = transform_xyz(back_arr[:, :3], rotation_fb, translation_fb)
+        origins = (back_arr[:, 5:8] @ rotation_fb.T + translation_fb
+                   if back_arr.shape[1] >= 8 else np.empty((0, 3)))
+        merged, time_removed, n_back = kernels.merge_prepared(front_arr, back_arr, xyz, origins,
+                                                            np.float32(dt_ms), np.float32(end_ms))
+        if n_back == 0:
+            return front_scan, body_removed, 0
     else:
-        merged = np.concatenate([front_arr, back_in_front], axis=0)
+        back_in_front = transform_points_array(back_arr, rotation_fb, translation_fb)
+        if back_arr.shape[1] >= 8:
+            back_in_front[:, 5:8] = back_arr[:, 5:8] @ rotation_fb.T + translation_fb
+        back_in_front[:, 4] += np.float32(dt_ms)
+        in_window = ((back_in_front[:, 4] >= 0.) & (back_in_front[:, 4] <= end_ms))
+        time_removed = int(np.count_nonzero(~in_window))
+        back_in_front = back_in_front[in_window]
+        n_back = len(back_in_front)
+        if n_back == 0:
+            return front_scan, body_removed, 0
+        merged = back_in_front if len(front_arr) == 0 else np.concatenate([front_arr, back_in_front], axis=0)
     return (
         replace(
             front_scan,
@@ -105,7 +118,7 @@ def merge_back_into_front(
                             + body_removed + time_removed),
         ),
         body_removed,
-        len(back_in_front),
+        n_back,
     )
 
 
@@ -160,7 +173,7 @@ class MappingFrontend:
             return None
         if scan.clock_id != self._clock_id or scan.sensor_id != self._settings.primary_lidar:
             raise ValueError("primary scan has unexpected sensor or clock")
-        native = prepare_scan(scan, self._settings.blind)
+        native = prepare_scan(scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing)
         # Preserve the arithmetic used by recorded IMU windows.
         return FrontendScan(native, scan.begin_ns, native.frame_stamp + native.scan_duration_s)
 
@@ -170,7 +183,7 @@ class MappingFrontend:
             return None
         if scan.clock_id != self._clock_id or scan.sensor_id != "back":
             raise ValueError("auxiliary scan has unexpected sensor or clock")
-        native = prepare_scan(scan, self._settings.blind)
+        native = prepare_scan(scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing)
         # Preserve the arithmetic used by recorded IMU windows.
         return FrontendScan(native, scan.begin_ns, native.frame_stamp + native.scan_duration_s)
 
@@ -315,9 +328,6 @@ class MappingFrontend:
                 imu_ms=0., lio_ms=0., map_ms=0., grid_ms=0., voxel_ms=0., total_ms=0.)
 
             scan = tick.scan
-            if settings.grid_ray_clearing:
-                scan = replace(scan, points_array=np.column_stack((scan.points_array,
-                    np.zeros((len(scan.points_array), 3), dtype=scan.points_array.dtype))))
 
             body_removed = 0
             back_n = 0
@@ -339,9 +349,6 @@ class MappingFrontend:
                 if back_msg is not None:
                     back_ns = int(back_msg.timestamp_ns)
                     back_scan = back_msg.scan
-                    if settings.grid_ray_clearing:
-                        back_scan = replace(back_scan, points_array=np.column_stack((back_scan.points_array,
-                            np.zeros((len(back_scan.points_array), 3), dtype=back_scan.points_array.dtype))))
                     back_scan_time_offset_s = abs(float(back_scan.frame_stamp) - float(scan.frame_stamp))
                     if back_scan_time_offset_s <= settings.max_back_dt and back_ns != last_back_ns:
                         try:

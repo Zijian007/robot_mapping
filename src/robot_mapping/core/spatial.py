@@ -6,23 +6,35 @@ from typing import Sequence
 import numpy as np
 
 from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN, OccupancyGridSpec
+from robot_mapping.backends.ray_native import kernels
 
 
 class WorldVoxelHash:
     """Axis-aligned voxel set in world frame (dedupe by cell index)."""
 
     def __init__(self, resolution: float = 0.15) -> None:
-        if resolution <= 0:
-            raise ValueError("voxel resolution must be > 0")
+        if not np.isfinite(resolution) or resolution <= 0:
+            raise ValueError("voxel resolution must be finite and positive")
         self.resolution = float(resolution)
         self._inv = 1.0 / self.resolution
-        self._cells: set[tuple[int, int, int]] = set()
+        self._native_store = kernels.VoxelStore(self.resolution) if kernels is not None else None
+        self._python_cells: set[tuple[int, int, int]] = set()
+
+    @property
+    def _cells(self):
+        """Diagnostic snapshot on the native path; never copied during ingestion."""
+        if self._native_store is not None:
+            return set(map(tuple, self._native_store.keys()))
+        return self._python_cells
 
     def clear(self) -> None:
-        self._cells.clear()
+        if self._native_store is not None:
+            self._native_store.clear()
+        else:
+            self._python_cells.clear()
 
     def __len__(self) -> int:
-        return len(self._cells)
+        return self._native_store.size if self._native_store is not None else len(self._python_cells)
 
     def _key(self, x: float, y: float, z: float) -> tuple[int, int, int]:
         return (
@@ -38,6 +50,8 @@ class WorldVoxelHash:
             return np.empty((0, 3), dtype=np.float32)
         if arr.ndim != 2 or arr.shape[1] < 3:
             raise ValueError("points must be (N, >=3)")
+        if self._native_store is not None:
+            return self._native_store.add_points(arr)
         keys = np.floor(arr[:, :3] * self._inv).astype(np.int64)
         new_centers: list[tuple[float, float, float]] = []
         half = 0.5 * self.resolution
@@ -58,6 +72,8 @@ class WorldVoxelHash:
         return np.asarray(new_centers, dtype=np.float32)
 
     def points_array(self) -> np.ndarray:
+        if self._native_store is not None:
+            return self._native_store.points_array()
         if not self._cells:
             return np.empty((0, 3), dtype=np.float32)
         keys = np.fromiter(

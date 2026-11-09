@@ -136,6 +136,16 @@ class RayOccupancy2D(GrowingOccupancy2D):
             result.append(((rows*self._width+cols)*depth+layers)[valid])
         return np.unique(np.concatenate(result)) if result else np.empty(0, dtype=np.int64)
 
+    def _native_groups(self, rays):
+        # Keep NumPy's exact angular bins and round-to-even origin grouping.
+        # The native update selects nearest rays and applies the bounded subset.
+        delta = rays[:, 3:]-rays[:, :3]
+        azimuth = np.floor((np.arctan2(delta[:, 1], delta[:, 0])+np.pi)*180/np.pi).astype(int) % 360
+        layer = np.clip(np.floor((rays[:, 5]-self.min_height)/self.height_resolution),
+                        -1, self._scores.shape[2]).astype(int)
+        origins = np.round(rays[:, :3]/.25)
+        return np.column_stack((origins, azimuth, layer)).astype(np.int64)
+
     def ingest_rays(self, rays, robot_xy=None):
         rays = np.asarray(rays, dtype=np.float64)
         if rays.ndim != 2 or rays.shape[1] != 6 or not np.isfinite(rays).all():
@@ -154,6 +164,13 @@ class RayOccupancy2D(GrowingOccupancy2D):
         if robot_xy is not None:
             extent = np.vstack((extent, [*robot_xy, 0.]))
         self._expand_to_include(extent[:, 0], extent[:, 1])
+        if kernels is not None:
+            kernels.grid_update(rays, distances, self._native_groups(rays), self._scores, self._values,
+                self._origin_x, self._origin_y, self.resolution, self.min_height, self.max_height,
+                self.height_resolution, self.max_ray_range, self.max_rays, self.free_radius_m,
+                self._last_footprint_xy, None if robot_xy is None else tuple(robot_xy))
+            self._last_footprint_xy = None if robot_xy is None else tuple(robot_xy)
+            return
         hits = np.unique(self._keys(rays[distances <= self.max_ray_range, 3:]))
         misses = np.setdiff1d(self._free_keys(self._select_rays(rays)), hits, assume_unique=True)
         scores = self._scores.reshape(-1)

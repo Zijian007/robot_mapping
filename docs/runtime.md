@@ -56,8 +56,9 @@ bash run.sh doctor --native --loop
 
 当前 wheelhouse 对应 `robot_mapping 0.4.0` 和 `robot_mapping_gdk 0.2.0`，包含独立的 FAST-LIO2、pygicp 和 GTSAM 原生 wheel，不包含 grid_icp。
 
-- FAST-LIO2：从独立 `/home/agi/fastlio2` 项目编译 Python 绑定及 C++ 后端。
-- 射线清理：从本包 `csrc/ray_native.cpp` 编译 `_ray_native`，包含在 `robot_mapping` 的平台 wheel 中；仅需要 C++17 和 pybind11，不依赖 FAST-LIO/PCL。
+- FAST-LIO2：从独立 `/home/agi/fastlio2` 项目编译 Python 绑定及 C++ 后端，当前 wheel 包含
+  原生阶段计时和查询/匹配工作区复用，见 [性能说明](../../fastlio2/docs/performance.md)。
+- 射线、体素、融合栅格、点云预处理和本体 TF 校验：从本包 `csrc/ray_native.cpp`、`csrc/grid_update.hpp` 与 `csrc/point_preprocess.hpp` 编译 API v5 的 `_ray_native`，包含在 `robot_mapping` 的平台 wheel 中；仅需要 C++17 和 pybind11，不依赖 FAST-LIO/PCL。
 - FastVGICP：从固定 commit 的 fast_gicp 源码编译，包含释放 GIL 和暴露收敛状态的绑定补丁；Python 导入名为 `pygicp`。
 - GTSAM：从 4.2.2 源码编译 C++ 库和 Python 绑定。
 

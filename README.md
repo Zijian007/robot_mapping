@@ -70,10 +70,23 @@ G2 的初始 `base_link` 原点、水平航向、重力向上和高度参数换�
 ## 原生后端与代码入口
 
 射线热点由本包的可选 C++ 扩展 `_ray_native` 执行：射线分组、2D 栅格遍历、3D
-采样/去重及回波邻域保护。扩展独立于 FAST-LIO、PCL 和设备 SDK，遍历时释放 GIL。
-Python 继续管理分值、观测顺序和回环；C++ 缓存体素索引，随插点、删除和清空同步，
-避免每次观测复制整张体素图。没有扩展时使用 NumPy 参考实现。
-`doctor` 的 `ray_backend` 显示 `cpp` 或 `numpy`，受管理的离线运行环境要求 `cpp`。
+采样/去重及回波邻域保护。扩展独立于 FAST-LIO、PCL 和设备 SDK，计算时释放 GIL。
+API v2 的 `VoxelStore` 直接拥有体素集合、清理计数和累计删除数，批量完成插点、
+正观测重置、射线证据更新和点云导出，不再同步 Python 集合与 C++ 索引。
+API v3 的融合栅格内核批量完成近处回波筛选、命中/空闲去重、分值更新和占据状态刷新，
+直接写入现有栅格数组。Python 管理栅格分配/扩容、角度分组、观测顺序和回环；
+API v4 增加盲区过滤、点字段准备、URDF 包围盒点筛选及双雷达合并的行压缩内核，
+减少预处理中间数组。API v5 将本体 TF 的有限性、齐次末行及容差比较改为小型 C++ 谓词；
+Gram 矩阵乘法和行列式仍由 NumPy 计算，查询顺序、容差与错误归属保持不变。
+没有扩展时使用 Python/NumPy 参考实现。
+`doctor` 显示 `ray_backend`、`voxel_backend`、`grid_backend`、`preprocess_backend`、
+`body_tf_validation` 和 `ray_native_api`；受管理的运行环境要求 C++ API v5。
+旧扩展会回退到参考实现，需要重建才能启用原生路径。
+点云导出不保证点的排列顺序；几何坐标、栅格编码及证据规则保持一致。
+迁移范围、等价性验证和性能测量见 [原生体素存储](docs/native-voxels.md)。
+2D 更新的迁移和逐观测测量见 [融合栅格更新](docs/native-grid.md)。
+点云准备与双雷达预处理的迁移见 [原生点云预处理](docs/native-preprocess.md)。
+本体 TF 校验的后续优化见 [原生 TF 校验](docs/native-body-tf.md)。
 源码构建需要 C++17 编译器和 pybind11；安装已编译 wheel 不需要编译工具。
 
 G2 启动脚本将 OpenBLAS 限为一个线程，FAST-LIO 的 OpenMP 并行设置保持独立。

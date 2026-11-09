@@ -78,6 +78,8 @@ assert not ({'move_odom','wholebody','agibot_gdk','robot_mapping_gdk'} & set(sys
 if sys.argv[2] == '--native':
     from robot_mapping.backends.ray_native import kernels
     assert kernels is not None, 'native validation requires compiled ray kernels'
+    assert kernels.API_VERSION >= 5
+    assert mapping.voxels._native_store is not None
     assert main(['doctor','--native','--loop']) == 0
 print(json.dumps({'wheel_import': str(robot_mapping.__file__),
                   'isolated_core': 'PASS', 'cli': 'PASS',

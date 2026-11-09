@@ -25,31 +25,37 @@ class RayVoxelHash(WorldVoxelHash):
         self.clear_observations = int(clear_observations)
         self.max_ray_range = float(max_ray_range)
         self.max_rays = int(max_rays)
-        self._misses = {}
-        self._native_index = kernels.VoxelIndex() if kernels is not None else None
-        self.removed_voxels = 0  # removal events, not unique objects
+        self._python_misses = {}
+        self._python_removed = 0  # removal events, not unique objects
+
+    @property
+    def _misses(self):
+        if self._native_store is not None:
+            return self._native_store.misses()
+        return self._python_misses
+
+    @property
+    def removed_voxels(self):
+        if self._native_store is not None:
+            return self._native_store.removed_voxels
+        return self._python_removed
 
     def clear(self):
         super().clear()
-        self._misses.clear()
-        if self._native_index is not None:
-            self._native_index.clear()
-        self.removed_voxels = 0
+        self._python_misses.clear()
+        self._python_removed = 0
 
     def add_points(self, points):
         added = super().add_points(points)
+        if self._native_store is not None:
+            return added
         # Keyframe geometry is positive evidence, even when voxel filtering
         # moved its centroid into a neighbouring cell of the raw return.
-        arr = np.asarray(points)
+        arr = np.asarray(points, dtype=np.float64)
         if arr.size:
             keys = np.floor(arr[:, :3]*self._inv).astype(np.int64)
             for key in keys:
                 self._misses.pop(tuple(key), None)
-            if self._native_index is not None:
-                # WorldVoxelHash quantizes in float64 even for float32 inputs.
-                storage_keys = (keys if arr.dtype == np.float64 else
-                    np.floor(np.asarray(arr[:, :3], dtype=np.float64)*self._inv).astype(np.int64))
-                self._native_index.add(storage_keys)
         return added
 
     def _select_rays(self, rays, distance):
@@ -58,7 +64,7 @@ class RayVoxelHash(WorldVoxelHash):
         el = np.floor(np.degrees(np.arctan2(delta[:, 2], np.linalg.norm(delta[:, :2], axis=1)))).astype(int)
         origins = np.round(rays[:, :3]/.25).astype(np.int64)
         groups = np.column_stack((origins, az, el))
-        if kernels is not None and self._native_index is not None:
+        if kernels is not None and self._native_store is not None:
             chosen = kernels.select_grouped(groups, distance)
         else:
             order = np.lexsort((distance, *groups[:, ::-1].T))
@@ -71,20 +77,17 @@ class RayVoxelHash(WorldVoxelHash):
         rays = np.asarray(rays, dtype=np.float64)
         if rays.ndim != 2 or rays.shape[1] != 6 or not np.isfinite(rays).all():
             raise ValueError("3D rays must be finite (N,6)")
-        if not len(rays) or not self._cells:
+        if not len(rays) or not len(self):
             return
         distance = np.linalg.norm(rays[:, 3:]-rays[:, :3], axis=1)
         keep = distance > 1e-6
         rays, distance = rays[keep], distance[keep]
         if not len(rays):
             return  # missing/zero-length returns never clear anything
-        if kernels is not None and self._native_index is not None:
+        if self._native_store is not None:
             selected, lengths = self._select_rays(rays, distance)
-            reset, crossed = kernels.voxel_evidence(rays, selected, lengths,
-                self._native_index, self._misses, self.resolution, self.max_ray_range)
-            for key in map(tuple, reset):
-                self._misses.pop(key, None)
-            self._apply_misses(map(tuple, crossed))
+            self._native_store.ingest_rays(rays, selected, lengths,
+                self.max_ray_range, self.clear_observations)
             return
         # Every return protects its voxel and a one-cell neighbourhood, even
         # when its ray is excluded from the bounded clearing subset.
@@ -120,15 +123,11 @@ class RayVoxelHash(WorldVoxelHash):
         self._apply_misses(key for key in self._cells.intersection(crossed) if not protected(key))
 
     def _apply_misses(self, keys):
-        removed = []
         for key in keys:
             count = self._misses.get(key, 0)+1
             if count >= self.clear_observations:
                 self._cells.remove(key)
                 self._misses.pop(key, None)
-                self.removed_voxels += 1
-                removed.append(key)
+                self._python_removed += 1
             else:
                 self._misses[key] = count
-        if removed and self._native_index is not None:
-            self._native_index.erase(np.asarray(removed, dtype=np.int64).reshape(-1, 3))
