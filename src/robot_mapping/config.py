@@ -1,4 +1,5 @@
 """Algorithm defaults in generic.json; user files overlay robot, source and switches."""
+
 from __future__ import annotations
 
 import copy
@@ -124,6 +125,7 @@ def load_mapping_config(path: str | Path) -> dict[str, Any]:
             data = json.load(f)
         else:
             import yaml
+
             data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise ValueError(f"配置不是 mapping: {path}")
@@ -134,7 +136,12 @@ def _read_body_box(body: dict[str, Any], name: str) -> BodyBox:
     nested = body.get(name)
     if not isinstance(nested, dict):
         raise ValueError(f"body_filter.{name} 缺少盒子边界")
-    return BodyBox(**{key: float(nested[key]) for key in ("min_x", "max_x", "min_y", "max_y", "min_z", "max_z")})
+    return BodyBox(
+        **{
+            key: float(nested[key])
+            for key in ("min_x", "max_x", "min_y", "max_y", "min_z", "max_z")
+        }
+    )
 
 
 def mapping_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -215,7 +222,9 @@ def mapping_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def settings_from_profile(profile: dict[str, Any], config_path: str | Path, **overrides) -> MappingSettings:
+def settings_from_profile(
+    profile: dict[str, Any], config_path: str | Path, **overrides
+) -> MappingSettings:
     """Build settings without command-line parsing; validate once at session entry."""
     import os
 
@@ -245,22 +254,33 @@ def profile_from_settings(settings: MappingSettings, profile: dict[str, Any]) ->
         for key in defaults[section]:
             if key != "loop":
                 result[section][key] = getattr(settings, prefix + key)
-    result["online"]["loop"] = dict(result["online"]["loop"], **{
-        key: getattr(settings, "loop_" + key) for key in defaults["online"]["loop"]})
-    aliases = {"enabled": "body_filter_enabled", "mode": "body_filter_mode",
-               "front": "front_box", "back": "back_box"}
+    result["online"]["loop"] = dict(
+        result["online"]["loop"],
+        **{key: getattr(settings, "loop_" + key) for key in defaults["online"]["loop"]},
+    )
+    aliases = {
+        "enabled": "body_filter_enabled",
+        "mode": "body_filter_mode",
+        "front": "front_box",
+        "back": "back_box",
+    }
     for key in defaults["body_filter"]:
         value = getattr(settings, aliases.get(key, "body_" + key))
-        result["body_filter"][key] = (asdict(value) if isinstance(value, BodyBox) else
-                                      str(value) if isinstance(value, Path) else value)
+        result["body_filter"][key] = (
+            asdict(value)
+            if isinstance(value, BodyBox)
+            else str(value)
+            if isinstance(value, Path)
+            else value
+        )
     result.setdefault("session", {})["maps_root"] = str(settings.maps_root)
     result.pop("effective_settings", None)  # retired duplicate, never read by replay
     return result
 
 
 def validate_settings(settings: MappingSettings) -> None:
-    for name,value in vars(settings).items():
-        if isinstance(value,float) and not math.isfinite(value):
+    for name, value in vars(settings).items():
+        if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"{name} 必须为有限数值")
     if settings.lidar not in {"front", "back", "both"}:
         raise ValueError("lio.lidar must be front, back or both")
@@ -270,7 +290,10 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("standalone mapping requires header/source time")
     if settings.grid_min_height > settings.grid_max_height:
         raise ValueError("grid min_height must not exceed max_height")
-    if min(settings.grid_height_resolution, settings.grid_max_ray_range, settings.grid_max_rays) <= 0:
+    if (
+        min(settings.grid_height_resolution, settings.grid_max_ray_range, settings.grid_max_rays)
+        <= 0
+    ):
         raise ValueError("grid ray parameters must be positive")
     if settings.grid_update_interval_s < 0:
         raise ValueError("grid update_interval_s must be nonnegative")
@@ -286,8 +309,13 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("body tf_timeout_s 必须为有限正数")
     if settings.lidar_ready < 0:
         raise ValueError("--lidar-ready 不能小于 0")
-    for name in ("max_imu_gap_s", "max_imu_boundary_gap_s", "imu_startup_timeout_s",
-                 "min_imu_samples", "max_match_failures"):
+    for name in (
+        "max_imu_gap_s",
+        "max_imu_boundary_gap_s",
+        "imu_startup_timeout_s",
+        "min_imu_samples",
+        "max_match_failures",
+    ):
         if getattr(settings, name) <= 0:
             raise ValueError(f"{name} 必须大于 0")
     if settings.cube_side_length <= 0 or settings.det_range <= 0:

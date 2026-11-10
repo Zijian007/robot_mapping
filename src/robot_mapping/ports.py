@@ -1,12 +1,13 @@
 """SDK-free sensor contracts for mapping inputs."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, TypedDict
+
 import numpy as np
 
 from .types import ImuBatch, LidarScan
-
 
 if TYPE_CHECKING:
     from .backends.fastlio import BackendScan
@@ -22,6 +23,7 @@ class LioResult(_LioState, total=False):
 
     prediction_only carries IMU-predicted state after a failed lidar update.
     """
+
     lidar_update_valid: bool
     position: Sequence[float] | np.ndarray
     orientation_xyzw: Sequence[float] | np.ndarray
@@ -47,6 +49,6 @@ class TransformProvider(Protocol):
 
 class LioBackend(Protocol):
     """Algorithm backend operating on normalized scans and an (N, 7) IMU array."""
+
     def process(self, scan: BackendScan, imu: np.ndarray) -> LioResult: ...
     def reset(self) -> None: ...
-

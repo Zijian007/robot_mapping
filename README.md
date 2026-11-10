@@ -2,6 +2,8 @@
 
 与设备 SDK 解耦的雷达建图算法包，当前版本 **0.4.0**。C++ FAST-LIO2 负责里程计和去畸变，可选 FastVGICP / GTSAM 负责回环；Python 管理过滤、关键帧和栅格。不导入 `move_odom`、`wholebody` 或设备适配包。
 
+开发约定与统一检查入口见 [算法包代码规范](docs/code-style.md)。
+
 ## 依赖边界
 
 | 部分 | 职责 | 是否需要设备 SDK |

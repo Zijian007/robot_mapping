@@ -4,6 +4,7 @@
 
 | 用途 | 入口 |
 |---|---|
+| Python/C++ 规范检查 | `check_quality.py`；加 `--fix` 应用安全修复和格式化 |
 | 安装锁定运行环境 | `install_runtime.sh` / `install_runtime.py` |
 | 诊断当前安装 | 根目录 `run.sh doctor --native --loop` |
 | 执行源码测试 | `run_tests.sh`，可用 `PYTHON=.venv/bin/python` 选择解释器 |
@@ -21,3 +22,7 @@
 安装流程见 [运行环境说明](../docs/runtime.md)，源码与 wheel 验证见
 [开发指南](../docs/development.md)。一次性实验脚本保存在本机
 `artifacts/history/20261108/build/`，其中硬编码的历史路径不是受支持的工具接口。
+
+`runtime_bundle.py --gdk-root <robot_mapping_gdk>` 同时构建独立 HAL 的 wheel。
+默认查找 GDK 仓库的相邻目录 `robot_hal`，可用 `--hal-root <path>` 指定；
+算法包本身不依赖 HAL。

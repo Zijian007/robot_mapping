@@ -1,6 +1,9 @@
 """Height slicing without voxel-center quantization."""
+
 from __future__ import annotations
+
 import numpy as np
+
 
 def slice_pointcloud_by_height(
     parsed: dict[str, np.ndarray],

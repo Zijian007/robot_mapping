@@ -1,6 +1,8 @@
 """Bounded wall-time samples, shared with session status readers."""
-from collections import deque
+
 import threading
+from collections import deque
+
 import numpy as np
 
 
@@ -22,5 +24,7 @@ class FrameTimings:
         for name in samples[-1]:
             values = np.array([s[name] for s in samples])
             p50, p95, p99 = np.percentile(values, [50, 95, 99])
-            stages[name] = dict(p50=float(p50), p95=float(p95), p99=float(p99), max=float(values.max()))
+            stages[name] = dict(
+                p50=float(p50), p95=float(p95), p99=float(p99), max=float(values.max())
+            )
         return {"frames": len(samples), "last_ms": dict(samples[-1]), "stages_ms": stages}

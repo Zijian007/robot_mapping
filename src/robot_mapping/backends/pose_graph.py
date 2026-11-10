@@ -1,4 +1,5 @@
 """GTSAM Pose3 / iSAM2 pose-graph backend for online mapping loop closure."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from robot_mapping.core.pose_math import is_se3
+
 from .capabilities import load_gtsam
 
 
@@ -41,7 +43,9 @@ class PoseGraphNoise:
         for values in (self.odom_sigmas, self.loop_sigmas, self.prior_sigmas):
             array = np.asarray(values)
             if array.shape != (6,) or not np.isfinite(array).all() or np.any(array <= 0):
-                raise ValueError("Pose3 noise needs six finite positive sigmas (rotation, translation)")
+                raise ValueError(
+                    "Pose3 noise needs six finite positive sigmas (rotation, translation)"
+                )
 
 
 class PoseGraphBackend:
@@ -93,9 +97,7 @@ class PoseGraphBackend:
             if relative_to_prev is None:
                 raise ValueError("relative_to_prev required for keyframe > 0")
             between = self._pose3_from_matrix(relative_to_prev)
-            graph.add(
-                gtsam.BetweenFactorPose3(idx - 1, idx, between, self._odom_noise)
-            )
+            graph.add(gtsam.BetweenFactorPose3(idx - 1, idx, between, self._odom_noise))
         self._isam.update(graph, values)
         self._n_nodes = idx + 1
         return idx
@@ -116,5 +118,6 @@ class PoseGraphBackend:
 
     def optimized_matrices(self) -> list[np.ndarray]:
         estimate = self._isam.calculateEstimate()
-        return [np.asarray(estimate.atPose3(i).matrix(), dtype=np.float64)
-                for i in range(self._n_nodes)]
+        return [
+            np.asarray(estimate.atPose3(i).matrix(), dtype=np.float64) for i in range(self._n_nodes)
+        ]

@@ -3,10 +3,12 @@
 Timestamps are never rewritten to host receive time. Arrays are copied on
 construction so SDK buffers may be reused without changing archived data.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from numbers import Integral
+
 import numpy as np
 
 
@@ -48,10 +50,14 @@ class LidarScan:
     intensity: np.ndarray | None = None
 
     def __post_init__(self):
-        if not all(isinstance(v, str) and v for v in (self.sensor_id, self.frame_id, self.clock_id)):
+        if not all(
+            isinstance(v, str) and v for v in (self.sensor_id, self.frame_id, self.clock_id)
+        ):
             raise ValueError("sensor_id, frame_id and clock_id are required")
         for name in ("begin_ns", "duration_ns", "recv_monotonic_ns"):
-            object.__setattr__(self, name, _ns(getattr(self, name), name, positive=name != "recv_monotonic_ns"))
+            object.__setattr__(
+                self, name, _ns(getattr(self, name), name, positive=name != "recv_monotonic_ns")
+            )
         _ns(self.begin_ns + self.duration_ns, "end_ns", positive=True)
         points = np.asarray(self.xyz)
         if points.ndim != 2 or points.shape[1] != 3:
@@ -86,8 +92,9 @@ class ImuBatch:
             raise ValueError("IMU timestamps must be positive and strictly increasing")
         object.__setattr__(self, "timestamps_ns", stamps)
         for name in ("angular_velocity", "linear_acceleration"):
-            object.__setattr__(self, name, _owned(getattr(self, name), np.float64, (len(stamps), 3), name))
+            object.__setattr__(
+                self, name, _owned(getattr(self, name), np.float64, (len(stamps), 3), name)
+            )
 
     def __len__(self):
         return len(self.timestamps_ns)
-

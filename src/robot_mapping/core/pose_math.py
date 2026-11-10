@@ -1,13 +1,14 @@
 """SE3 helpers shared by online map / pose graph / loop closure."""
+
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
 
-def gravity_aligned_frame(up, forward, origin=(0., 0., 0.)) -> np.ndarray:
+def gravity_aligned_frame(up, forward, origin=(0.0, 0.0, 0.0)) -> np.ndarray:
     """Return output_from_input from three vectors expressed in input axes.
 
     +Z follows up; +X follows the horizontal projection of forward. The caller
@@ -33,10 +34,13 @@ def gravity_aligned_frame(up, forward, origin=(0., 0., 0.)) -> np.ndarray:
 
 def is_se3(mat: np.ndarray) -> bool:
     m = np.asarray(mat)
-    return (m.shape == (4, 4) and bool(np.isfinite(m).all()) and
-            bool(np.allclose(m[3], [0, 0, 0, 1], atol=1e-5)) and
-            bool(np.allclose(m[:3, :3].T @ m[:3, :3], np.eye(3), atol=1e-4)) and
-            bool(np.isclose(np.linalg.det(m[:3, :3]), 1., atol=1e-4)))
+    return (
+        m.shape == (4, 4)
+        and bool(np.isfinite(m).all())
+        and bool(np.allclose(m[3], [0, 0, 0, 1], atol=1e-5))
+        and bool(np.allclose(m[:3, :3].T @ m[:3, :3], np.eye(3), atol=1e-4))
+        and bool(np.isclose(np.linalg.det(m[:3, :3]), 1.0, atol=1e-4))
+    )
 
 
 def quat_xyzw_to_rot(q: Sequence[float]) -> np.ndarray:

@@ -1,20 +1,21 @@
 """Mapping loop using normalized sensor data and an injectable LIO backend."""
+
 from __future__ import annotations
 
 import math
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
-from robot_mapping.ports import LioBackend, LioResult, SensorSource
 from robot_mapping.backends.fastlio import BackendScan, prepare_scan
 from robot_mapping.backends.ray_native import kernels
-
-
+from robot_mapping.config import MappingSettings
+from robot_mapping.core.online_map import OnlineMap
 from robot_mapping.filters.body_filter import (
     BodyBox,
     MissingBodyTransform,
@@ -23,16 +24,17 @@ from robot_mapping.filters.body_filter import (
     transform_points_array,
     transform_xyz,
 )
-from robot_mapping.config import MappingSettings
-from robot_mapping.core.online_map import OnlineMap
+from robot_mapping.ports import LioBackend, LioResult, SensorSource
 
 
 @dataclass(frozen=True)
 class FrontendScan:
     """Native scan plus the source time for TF and integration time for LIO."""
+
     scan: BackendScan
     timestamp_ns: int
     integration_stamp: float
+
 
 def _fmt_box(box: BodyBox) -> str:
     return (
@@ -42,12 +44,16 @@ def _fmt_box(box: BodyBox) -> str:
     )
 
 
-def apply_body_filter(scan: Any, rotation: np.ndarray, translation: np.ndarray, box: BodyBox) -> tuple[Any, int]:
+def apply_body_filter(
+    scan: Any, rotation: np.ndarray, translation: np.ndarray, box: BodyBox
+) -> tuple[Any, int]:
     arr = scan.points_array
     kept, n_removed = filter_points_array(arr, rotation, translation, box)
     if n_removed == 0:
         return scan, 0
-    return replace(scan, points_array=kept, dropped_points=int(scan.dropped_points) + n_removed), n_removed
+    return replace(
+        scan, points_array=kept, dropped_points=int(scan.dropped_points) + n_removed
+    ), n_removed
 
 
 def merge_back_into_front(
@@ -85,16 +91,24 @@ def merge_back_into_front(
     if max_scan_duration_s > 0.0:
         end_ms = min(end_ms, max_scan_duration_s * 1000.0)
     front_arr = front_scan.points_array
-    if (kernels is not None and front_arr.dtype == back_arr.dtype == np.float32
-            and front_arr.shape[1] == back_arr.shape[1]
-            and np.isfinite(end_ms) and abs(end_ms) < 3.4e38):
+    if (
+        kernels is not None
+        and front_arr.dtype == back_arr.dtype == np.float32
+        and front_arr.shape[1] == back_arr.shape[1]
+        and np.isfinite(end_ms)
+        and abs(end_ms) < 3.4e38
+    ):
         # Preserve NumPy's matrix arithmetic, but compact time-valid back points
         # directly into the final buffer instead of copying entire scans twice.
         xyz = transform_xyz(back_arr[:, :3], rotation_fb, translation_fb)
-        origins = (back_arr[:, 5:8] @ rotation_fb.T + translation_fb
-                   if back_arr.shape[1] >= 8 else np.empty((0, 3)))
-        merged, time_removed, n_back = kernels.merge_prepared(front_arr, back_arr, xyz, origins,
-                                                            np.float32(dt_ms), np.float32(end_ms))
+        origins = (
+            back_arr[:, 5:8] @ rotation_fb.T + translation_fb
+            if back_arr.shape[1] >= 8
+            else np.empty((0, 3))
+        )
+        merged, time_removed, n_back = kernels.merge_prepared(
+            front_arr, back_arr, xyz, origins, np.float32(dt_ms), np.float32(end_ms)
+        )
         if n_back == 0:
             return front_scan, body_removed, 0
     else:
@@ -102,20 +116,28 @@ def merge_back_into_front(
         if back_arr.shape[1] >= 8:
             back_in_front[:, 5:8] = back_arr[:, 5:8] @ rotation_fb.T + translation_fb
         back_in_front[:, 4] += np.float32(dt_ms)
-        in_window = ((back_in_front[:, 4] >= 0.) & (back_in_front[:, 4] <= end_ms))
+        in_window = (back_in_front[:, 4] >= 0.0) & (back_in_front[:, 4] <= end_ms)
         time_removed = int(np.count_nonzero(~in_window))
         back_in_front = back_in_front[in_window]
         n_back = len(back_in_front)
         if n_back == 0:
             return front_scan, body_removed, 0
-        merged = back_in_front if len(front_arr) == 0 else np.concatenate([front_arr, back_in_front], axis=0)
+        merged = (
+            back_in_front
+            if len(front_arr) == 0
+            else np.concatenate([front_arr, back_in_front], axis=0)
+        )
     return (
         replace(
             front_scan,
             points_array=merged,
             raw_points=int(front_scan.raw_points) + int(back_scan.raw_points),
-            dropped_points=(int(front_scan.dropped_points) + int(back_scan.dropped_points)
-                            + body_removed + time_removed),
+            dropped_points=(
+                int(front_scan.dropped_points)
+                + int(back_scan.dropped_points)
+                + body_removed
+                + time_removed
+            ),
         ),
         body_removed,
         n_back,
@@ -138,8 +160,12 @@ class MappingFrontend:
         lio: LioBackend | None = None,
         initialize_map: Callable[[np.ndarray, int], bool] | None = None,
     ) -> None:
-        self._extrinsics = {k: np.array(v, dtype=np.float64, copy=True) for k, v in lidar_extrinsics.items()}
-        self._imu_from_lidar = np.eye(4) if imu_from_lidar is None else np.array(imu_from_lidar, copy=True)
+        self._extrinsics = {
+            k: np.array(v, dtype=np.float64, copy=True) for k, v in lidar_extrinsics.items()
+        }
+        self._imu_from_lidar = (
+            np.eye(4) if imu_from_lidar is None else np.array(imu_from_lidar, copy=True)
+        )
         self._source = source
         self._clock_id = clock_id
         self._imu_frame_id = imu_frame_id
@@ -164,6 +190,7 @@ class MappingFrontend:
         self.match_failure_count = 0
         self.consecutive_match_failures = 0
         from .timing import FrameTimings
+
         self.timings = FrameTimings()
         self._frame_times = {}
 
@@ -173,7 +200,9 @@ class MappingFrontend:
             return None
         if scan.clock_id != self._clock_id or scan.sensor_id != self._settings.primary_lidar:
             raise ValueError("primary scan has unexpected sensor or clock")
-        native = prepare_scan(scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing)
+        native = prepare_scan(
+            scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing
+        )
         # Preserve the arithmetic used by recorded IMU windows.
         return FrontendScan(native, scan.begin_ns, native.frame_stamp + native.scan_duration_s)
 
@@ -183,17 +212,23 @@ class MappingFrontend:
             return None
         if scan.clock_id != self._clock_id or scan.sensor_id != "back":
             raise ValueError("auxiliary scan has unexpected sensor or clock")
-        native = prepare_scan(scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing)
+        native = prepare_scan(
+            scan, self._settings.blind, include_origins=self._settings.grid_ray_clearing
+        )
         # Preserve the arithmetic used by recorded IMU windows.
         return FrontendScan(native, scan.begin_ns, native.frame_stamp + native.scan_duration_s)
 
     def _read_imu(self, begin: float, end: float) -> np.ndarray:
-        batch = self._source.imu_between(round(begin * 1e9), round(end * 1e9), clock_id=self._clock_id)
+        batch = self._source.imu_between(
+            round(begin * 1e9), round(end * 1e9), clock_id=self._clock_id
+        )
         if batch.clock_id != self._clock_id:
             raise ValueError("IMU and LiDAR clocks do not match")
         if batch.frame_id != self._imu_frame_id:
             raise ValueError("IMU frame does not match calibrated robot.imu_frame_id")
-        return np.column_stack((batch.timestamps_ns * 1e-9, batch.angular_velocity, batch.linear_acceleration))
+        return np.column_stack(
+            (batch.timestamps_ns * 1e-9, batch.angular_velocity, batch.linear_acceleration)
+        )
 
     def _imu_window_error(self, samples: np.ndarray, begin: float, end: float) -> str | None:
         """Validate coverage as well as count; small boundary extrapolation is allowed."""
@@ -204,20 +239,30 @@ class MappingFrontend:
         stamps = samples[:, 0]
         # Epoch timestamps lose a fraction of a microsecond in float arithmetic.
         tolerance = 1e-6
-        if (not np.isfinite(samples).all() or np.any(np.diff(stamps) <= 0)
-                or stamps[0] < begin - tolerance or stamps[-1] > end + tolerance):
+        if (
+            not np.isfinite(samples).all()
+            or np.any(np.diff(stamps) <= 0)
+            or stamps[0] < begin - tolerance
+            or stamps[-1] > end + tolerance
+        ):
             return "时间戳不在请求窗口内或样本无效"
         head, tail = stamps[0] - begin, end - stamps[-1]
         boundary = self._settings.max_imu_boundary_gap_s
         if max(head, tail) > boundary + tolerance:
             return f"首尾缺失过长 (head={head:.4f}s, tail={tail:.4f}s, limit={boundary:.4f}s)"
-        gap = float(np.max(np.diff(stamps))) if len(stamps) > 1 else 0.
+        gap = float(np.max(np.diff(stamps))) if len(stamps) > 1 else 0.0
         if gap > self._settings.max_imu_gap_s + tolerance:
             return f"内部断点过长 ({gap:.4f}s > {self._settings.max_imu_gap_s:.4f}s)"
         return None
 
-    def _filter_scan(self, scan: Any, lidar: str, timestamp_ns: int,
-                     rotation: np.ndarray, translation: np.ndarray) -> tuple[Any, int]:
+    def _filter_scan(
+        self,
+        scan: Any,
+        lidar: str,
+        timestamp_ns: int,
+        rotation: np.ndarray,
+        translation: np.ndarray,
+    ) -> tuple[Any, int]:
         settings = self._settings
         if not settings.body_filter_enabled:
             return scan, 0
@@ -227,9 +272,12 @@ class MappingFrontend:
             box = settings.back_box if lidar == "back" else settings.front_box
             return apply_body_filter(scan, rotation, translation, box)
         points, removed = self._body_filter.filter_points(
-            scan.points_array, rotation, translation, timestamp_ns, self._body_lookup)
+            scan.points_array, rotation, translation, timestamp_ns, self._body_lookup
+        )
         if removed:
-            scan = replace(scan, points_array=points, dropped_points=int(scan.dropped_points) + removed)
+            scan = replace(
+                scan, points_array=points, dropped_points=int(scan.dropped_points) + removed
+            )
         return scan, removed
 
     def _skip_missing_body_tf(self, exc: MissingBodyTransform) -> None:
@@ -243,6 +291,7 @@ class MappingFrontend:
 
     def setup_lio(self) -> None:
         from robot_mapping.backends.fastlio import create_backend
+
         if self._lio is None:
             self._lio = create_backend(self._settings, self._imu_from_lidar)
 
@@ -295,9 +344,11 @@ class MappingFrontend:
             f"filter_map={settings.filter_size_map} filter_surf={settings.filter_size_surf} "
             f"body_filter={'on' if settings.body_filter_enabled else 'off'} "
             f"mode={settings.body_filter_mode} "
-            + (f"urdf={settings.body_urdf_file} padding={settings.body_collision_threshold:.3f}m"
-               if settings.body_filter_mode == "urdf" else
-               f"front_box={_fmt_box(settings.front_box)} back_box={_fmt_box(settings.back_box)}")
+            + (
+                f"urdf={settings.body_urdf_file} padding={settings.body_collision_threshold:.3f}m"
+                if settings.body_filter_mode == "urdf"
+                else f"front_box={_fmt_box(settings.front_box)} back_box={_fmt_box(settings.back_box)}"
+            )
         )
 
         while not stop_evt.is_set():
@@ -318,14 +369,25 @@ class MappingFrontend:
             if tick is None:
                 if getattr(source, "exhausted", False):
                     return
-                if settings.max_lidar_frame_gap > 0 and time.monotonic() - self.last_frame_monotonic > settings.max_lidar_frame_gap:
+                if (
+                    settings.max_lidar_frame_gap > 0
+                    and time.monotonic() - self.last_frame_monotonic > settings.max_lidar_frame_gap
+                ):
                     raise RuntimeError("LiDAR 断流，停止建图并保存已有地图")
                 continue
             self.last_frame_monotonic = time.monotonic()
             handle_start = time.monotonic()
             self._frame_started = read_start
-            self._frame_times = dict(read_ms=(handle_start-read_start)*1000., prepare_ms=0.,
-                imu_ms=0., lio_ms=0., map_ms=0., grid_ms=0., voxel_ms=0., total_ms=0.)
+            self._frame_times = dict(
+                read_ms=(handle_start - read_start) * 1000.0,
+                prepare_ms=0.0,
+                imu_ms=0.0,
+                lio_ms=0.0,
+                map_ms=0.0,
+                grid_ms=0.0,
+                voxel_ms=0.0,
+                total_ms=0.0,
+            )
 
             scan = tick.scan
 
@@ -334,7 +396,8 @@ class MappingFrontend:
             if settings.body_filter_enabled:
                 try:
                     scan, body_removed = self._filter_scan(
-                        scan, settings.primary_lidar, tick.timestamp_ns, rotation, translation)
+                        scan, settings.primary_lidar, tick.timestamp_ns, rotation, translation
+                    )
                 except MissingBodyTransform as exc:
                     self._skip_missing_body_tf(exc)
                     continue
@@ -349,11 +412,14 @@ class MappingFrontend:
                 if back_msg is not None:
                     back_ns = int(back_msg.timestamp_ns)
                     back_scan = back_msg.scan
-                    back_scan_time_offset_s = abs(float(back_scan.frame_stamp) - float(scan.frame_stamp))
+                    back_scan_time_offset_s = abs(
+                        float(back_scan.frame_stamp) - float(scan.frame_stamp)
+                    )
                     if back_scan_time_offset_s <= settings.max_back_dt and back_ns != last_back_ns:
                         try:
                             back_scan, back_body_rm = self._filter_scan(
-                                back_scan, "back", back_ns, rotation_back, translation_back)
+                                back_scan, "back", back_ns, rotation_back, translation_back
+                            )
                         except MissingBodyTransform as exc:
                             self._skip_missing_body_tf(exc)
                             continue
@@ -392,7 +458,8 @@ class MappingFrontend:
             ):
                 raise RuntimeError(
                     f"相邻处理帧时间跨度 {target_stamp - last_target_stamp:.3f}s 超过上限 "
-                    f"{settings.max_lidar_frame_gap:.3f}s；可能为处理延迟跳帧或传感器间断，停止建图并保存当前地图")
+                    f"{settings.max_lidar_frame_gap:.3f}s；可能为处理延迟跳帧或传感器间断，停止建图并保存当前地图"
+                )
             if math.isfinite(last_target_stamp) and target_stamp <= last_target_stamp:
                 raise RuntimeError("LiDAR 时间戳倒退；停止建图并保留当前地图")
 
@@ -403,18 +470,20 @@ class MappingFrontend:
                     target_stamp - max(scan.scan_duration_s, settings.max_scan_duration, 0.1) - 0.02
                 )
 
-            self._frame_times["prepare_ms"] = (time.monotonic()-handle_start)*1000.
+            self._frame_times["prepare_ms"] = (time.monotonic() - handle_start) * 1000.0
             imu_start = time.monotonic()
             imu_array = self._read_imu(window_start, target_stamp)
-            self._frame_times["imu_ms"] = (time.monotonic()-imu_start)*1000.
+            self._frame_times["imu_ms"] = (time.monotonic() - imu_start) * 1000.0
             imu_error = self._imu_window_error(imu_array, window_start, target_stamp)
             if imu_error is not None:
                 self.skip_frame_count += 1
                 self.last_status = "waiting_for_imu"
                 # The source has already waited for late data. Once tracking has
                 # started, do not integrate across an unobserved interval.
-                if (math.isfinite(last_target_stamp) or
-                        time.monotonic() - imu_startup_started >= settings.imu_startup_timeout_s):
+                if (
+                    math.isfinite(last_target_stamp)
+                    or time.monotonic() - imu_startup_started >= settings.imu_startup_timeout_s
+                ):
                     raise RuntimeError(f"IMU 时间覆盖不完整，停止建图并保存已有地图：{imu_error}")
                 continue
 
@@ -423,7 +492,7 @@ class MappingFrontend:
                 if reset_serial != self._reset_serial:
                     continue
                 odom: LioResult = lio.process(scan, imu_array)
-            self._frame_times["lio_ms"] = (time.monotonic()-lio_start)*1000.
+            self._frame_times["lio_ms"] = (time.monotonic() - lio_start) * 1000.0
             self.last_status = odom["status"]
             if odom["status"] == "initializing":
                 # Mirror native initialization's valid accelerometer samples.
@@ -437,49 +506,85 @@ class MappingFrontend:
             handle_ms = (time.monotonic() - handle_start) * 1000.0
 
             if odom["status"] != "initializing":
-                valid_update = (odom["status"] == "scan_to_map"
-                                and odom.get("lidar_update_valid") is True)
+                valid_update = (
+                    odom["status"] == "scan_to_map" and odom.get("lidar_update_valid") is True
+                )
                 if not valid_update:
                     self.match_failure_count += 1
                     self.consecutive_match_failures += 1
-                    self._report_frame(odom, scan, handle_ms=handle_ms, imu_count=len(imu_array),
-                        body_removed=body_removed, back_points=back_n, keyframe=False)
+                    self._report_frame(
+                        odom,
+                        scan,
+                        handle_ms=handle_ms,
+                        imu_count=len(imu_array),
+                        body_removed=body_removed,
+                        back_points=back_n,
+                        keyframe=False,
+                    )
                     if self.consecutive_match_failures >= settings.max_match_failures:
                         raise RuntimeError(
-                            f"激光匹配连续失败 {self.consecutive_match_failures} 帧，停止建图并保存已有地图")
+                            f"激光匹配连续失败 {self.consecutive_match_failures} 帧，停止建图并保存已有地图"
+                        )
                     continue
                 self.consecutive_match_failures = 0
 
             keyframe = False
-            if self._online_map is not None and generation is not None and odom["status"] == "scan_to_map":
+            if (
+                self._online_map is not None
+                and generation is not None
+                and odom["status"] == "scan_to_map"
+            ):
                 if not map_alignment_ready:
                     if self._initialize_map is None:
                         # The core defaults to the backend's coordinates. The
                         # application may inject a frame initialization policy.
-                        map_alignment_ready = self._online_map.set_map_alignment(np.eye(4), generation=generation)
+                        map_alignment_ready = self._online_map.set_map_alignment(
+                            np.eye(4), generation=generation
+                        )
                     else:
                         if not init_acc_count:
                             raise RuntimeError("missing initialization IMU for map frame policy")
-                        map_alignment_ready = self._initialize_map(init_acc_sum / init_acc_count, generation)
+                        map_alignment_ready = self._initialize_map(
+                            init_acc_sum / init_acc_count, generation
+                        )
                     if not map_alignment_ready:
                         continue
                 map_start = time.monotonic()
                 keyframe = self._online_map.ingest_odom(odom, generation=generation)
-                self._frame_times["map_ms"] = (time.monotonic()-map_start)*1000.
+                self._frame_times["map_ms"] = (time.monotonic() - map_start) * 1000.0
                 self._frame_times.update(self._online_map.projection_timings)
                 if keyframe:
                     self.keyframe_count += 1
 
-            self._report_frame(odom, scan, handle_ms=handle_ms, imu_count=len(imu_array),
-                body_removed=body_removed, back_points=back_n, keyframe=keyframe)
+            self._report_frame(
+                odom,
+                scan,
+                handle_ms=handle_ms,
+                imu_count=len(imu_array),
+                body_removed=body_removed,
+                back_points=back_n,
+                keyframe=keyframe,
+            )
 
-    def _report_frame(self, odom: LioResult, scan: BackendScan, *, handle_ms: float,
-                      imu_count: int, body_removed: int, back_points: int, keyframe: bool) -> None:
+    def _report_frame(
+        self,
+        odom: LioResult,
+        scan: BackendScan,
+        *,
+        handle_ms: float,
+        imu_count: int,
+        body_removed: int,
+        back_points: int,
+        keyframe: bool,
+    ) -> None:
         """Keep reporting and its throttle separate from the acquisition/estimation loop."""
         now = time.monotonic()
-        self._frame_times["total_ms"] = (now-self._frame_started)*1000.
+        self._frame_times["total_ms"] = (now - self._frame_started) * 1000.0
         self.timings.add(self._frame_times)
-        if self._settings.print_interval > 0 and now - self._last_report_time < self._settings.print_interval:
+        if (
+            self._settings.print_interval > 0
+            and now - self._last_report_time < self._settings.print_interval
+        ):
             return
 
         prefix = "[warmup] " if self.frame_count <= self._settings.warmup_frames else ""
@@ -507,4 +612,3 @@ class MappingFrontend:
             f"{online_bits}"
         )
         self._last_report_time = now
-

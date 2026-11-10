@@ -1,8 +1,10 @@
 """Navigation-compatible occupancy encoding and geometry, independent of HAL."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
 import numpy as np
 
 GDK_UNKNOWN = -1
@@ -20,7 +22,7 @@ class OccupancyGridSpec:
 
     @classmethod
     def from_map_payload(cls, payload: dict[str, Any]) -> OccupancyGridSpec:
-        origin = ((payload.get("origin") or {}).get("position") or {})
+        origin = (payload.get("origin") or {}).get("position") or {}
         return cls(
             width=int(payload["width"]),
             height=int(payload["height"]),

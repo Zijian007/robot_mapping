@@ -1,15 +1,16 @@
 """A core-only process must not load an SDK, app, or optional solver."""
+
 import importlib
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 
 def test_core_import_without_applications_or_optional_dependencies(tmp_path):
-    script = r'''
+    script = r"""
 import importlib.abc, sys
 blocked = {'move_odom', 'wholebody', 'agibot_gdk', 'robot_mapping_gdk', 'gtsam', 'pygicp',
            'fastlio2', 'scipy', 'PIL', 'matplotlib', 'yaml'}
@@ -30,30 +31,43 @@ assert mapping.grid.occupied_count() == 1
 assert before_path == sys.path
 assert not (blocked & set(sys.modules))
 print('isolated core OK')
-'''
+"""
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
-    result = subprocess.run([sys.executable, "-c", script], cwd=tmp_path,
-                            env=env, capture_output=True, text=True, timeout=20)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_default_doctor_does_not_import_numerical_or_native_code(tmp_path):
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
-    script = '''
+    script = """
 import sys
 from robot_mapping.cli import main
 assert main(['doctor']) == 0
 assert not ({'numpy', 'gtsam', 'pygicp', 'fastlio2', 'agibot_gdk'} & set(sys.modules))
-'''
-    result = subprocess.run([sys.executable, "-c", script], cwd=tmp_path,
-                            env=env, capture_output=True, text=True, timeout=20)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_algorithm_cli_has_no_application_commands():
     from robot_mapping.cli import main
+
     for command in ("run", "replay", "project", "init-config"):
         with pytest.raises(SystemExit) as exc:
             main([command])

@@ -82,10 +82,11 @@ bash scripts/build_native.sh --fast-gicp-only
   --native-prefix ./build/native \
   --fastlio2-root /path/to/fastlio2 \
   --gdk-root /path/to/robot_mapping_gdk \
+  --hal-root /path/to/robot_hal \
   --output ./wheelhouse-new
 ```
 
-`--gdk-root` 可省略。工具复制所需模块和库、移除调试段、改成基于 `$ORIGIN` 的原生库搜索路径，并生成锁定 wheel。VGICP 版本包含补丁标识；GTSAM 原版本保留，但 wheel SHA-256 与实际来源写入 manifest，不能把本地重新打包的文件冒充上游原始 wheel。
+`--gdk-root` 可省略。包含在线采集包时，同时打包其依赖 `robot-hal`；`--hal-root` 默认是 GDK 仓库的相邻 `robot_hal` 目录。算法包本身不依赖 HAL。工具复制所需模块和库、移除调试段、改成基于 `$ORIGIN` 的原生库搜索路径，并生成锁定 wheel。VGICP 版本包含补丁标识；GTSAM 原版本保留，但 wheel SHA-256 与实际来源写入 manifest，不能把本地重新打包的文件冒充上游原始 wheel。
 
 普通 Python 依赖按当前已安装分发的 RECORD 导出，排除解释器外部文件、editable 路径钩子与缓存；console scripts 由 pip 重建。这是当前验证环境的恢复快照，不声称所有上游依赖均已做可重复源码构建。
 

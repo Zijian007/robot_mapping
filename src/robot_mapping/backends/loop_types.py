@@ -1,7 +1,10 @@
 """Backend-neutral loop configuration and immutable detection snapshots."""
+
 from __future__ import annotations
+
 import math
 from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -21,8 +24,14 @@ class LoopConfig:
     min_points: int = 50
 
     def __post_init__(self):
-        for name in ("search_radius_m", "max_correction_m", "max_correction_rad",
-                     "max_rmse_m", "vgicp_resolution", "vgicp_max_correspondence_distance"):
+        for name in (
+            "search_radius_m",
+            "max_correction_m",
+            "max_correction_rad",
+            "max_rmse_m",
+            "vgicp_resolution",
+            "vgicp_max_correspondence_distance",
+        ):
             value = getattr(self, name)
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"loop.{name} must be finite and > 0")
@@ -34,16 +43,12 @@ class LoopConfig:
             raise ValueError("loop.vgicp_num_threads must be >= 1")
 
 
-
-
 @dataclass(frozen=True)
 class LoopSnapshot:
     generation: int
     pose_revision: int
     clouds: tuple[np.ndarray, ...]
     poses: tuple[np.ndarray, ...]
-
-
 
 
 @dataclass(frozen=True)
@@ -57,4 +62,3 @@ class LoopMatch:
     rmse_m: float = 0.0
     generation: int = -1
     pose_revision: int = -1
-

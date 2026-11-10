@@ -1,4 +1,5 @@
 """Algorithm defaults live in generic.json; user files overlay robot and switches."""
+
 import json
 from dataclasses import replace
 from importlib.resources import files
@@ -39,10 +40,14 @@ def test_partial_overlay_keeps_algorithm_defaults():
 
 def test_load_settings_reads_overlay_on_defaults(tmp_path):
     path = tmp_path / "overlay.json"
-    path.write_text(json.dumps({
-        "lio": {"lidar": "both", "lidar_ready": 2.0},
-        "body_filter": {"enabled": True},
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "lio": {"lidar": "both", "lidar_ready": 2.0},
+                "body_filter": {"enabled": True},
+            }
+        )
+    )
     settings = load_settings(path)
     assert settings.filter_size_map == 0.15
     assert settings.lidar == "both"
@@ -51,11 +56,15 @@ def test_load_settings_reads_overlay_on_defaults(tmp_path):
 
 
 def test_effective_settings_snapshot_roundtrips_all_runtime_overrides(tmp_path):
-    from robot_mapping.config import settings_from_profile, profile_from_settings
+    from robot_mapping.config import profile_from_settings, settings_from_profile
     from robot_mapping.filters.body_filter import BodyBox
+
     path = tmp_path / "config.json"
-    user = {"robot": {"imu_frame_id": "robot_imu"}, "source": {"clock_id": "sensor"},
-            "effective_settings": {"grid_resolution": 999.}}
+    user = {
+        "robot": {"imu_frame_id": "robot_imu"},
+        "source": {"clock_id": "sensor"},
+        "effective_settings": {"grid_resolution": 999.0},
+    }
     original = json.dumps(user, sort_keys=True)
     base = settings_from_profile(user, path)
     # Exercise every numeric/bool setting, including fields previously omitted
@@ -67,12 +76,19 @@ def test_effective_settings_snapshot_roundtrips_all_runtime_overrides(tmp_path):
         elif isinstance(value, int):
             overrides[name] = value + 1
         elif isinstance(value, float):
-            overrides[name] = value + .001
+            overrides[name] = value + 0.001
         elif isinstance(value, tuple):
-            overrides[name] = tuple(v + .001 for v in value)
-    overrides.update(maps_root=tmp_path / "maps", body_urdf_file=tmp_path / "model.urdf",
-        body_package_path=tmp_path / "models", front_box=BodyBox(-1, 1, -2, 2, -3, 3),
-        back_box=BodyBox(-2, 2, -3, 3, -4, 4), lidar="back", imu="back", body_filter_mode="box")
+            overrides[name] = tuple(v + 0.001 for v in value)
+    overrides.update(
+        maps_root=tmp_path / "maps",
+        body_urdf_file=tmp_path / "model.urdf",
+        body_package_path=tmp_path / "models",
+        front_box=BodyBox(-1, 1, -2, 2, -3, 3),
+        back_box=BodyBox(-2, 2, -3, 3, -4, 4),
+        lidar="back",
+        imu="back",
+        body_filter_mode="box",
+    )
     settings = replace(base, **overrides)
     snapshot = profile_from_settings(settings, user)
     path.write_text(json.dumps(snapshot))

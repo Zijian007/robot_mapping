@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.26.4,<3"]
 [project.optional-dependencies]
 loop = ["numpy==1.26.4", "scipy>=1.10,<1.16", "gtsam==4.2.2"]
 test = ["pytest>=8"]
+dev = ["pytest>=8", "ruff==0.17.3"]
 runtime = ["PyYAML>=6,<7"]
 
 [project.scripts]
@@ -26,4 +27,18 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+required-version = "==0.17.3"
+target-version = "py310"
+line-length = 100
+extend-exclude = ["third_party", "build", "dist", "wheelhouse", "artifacts"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP006", "UP007", "UP035", "UP045"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 

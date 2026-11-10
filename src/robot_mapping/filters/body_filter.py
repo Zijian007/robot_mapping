@@ -1,4 +1,5 @@
 """Remove LiDAR points that fall inside a robot AABB in base_link."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,7 +9,6 @@ import numpy as np
 
 class MissingBodyTransform(RuntimeError):
     """A complete body mask cannot be constructed for this scan timestamp."""
-
 
 
 @dataclass(frozen=True)
@@ -29,8 +29,6 @@ class BodyBox:
             & (xyz_base[:, 2] >= self.min_z)
             & (xyz_base[:, 2] <= self.max_z)
         )
-
-
 
 
 def transform_xyz(xyz: np.ndarray, rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:

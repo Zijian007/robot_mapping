@@ -1,12 +1,15 @@
 """Spatial storage: voxel deduplication and an expanding occupancy grid."""
+
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from collections.abc import Sequence
+
 import numpy as np
 
-from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN, OccupancyGridSpec
 from robot_mapping.backends.ray_native import kernels
+
+from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN, OccupancyGridSpec
 
 
 class WorldVoxelHash:
@@ -34,7 +37,9 @@ class WorldVoxelHash:
             self._python_cells.clear()
 
     def __len__(self) -> int:
-        return self._native_store.size if self._native_store is not None else len(self._python_cells)
+        return (
+            self._native_store.size if self._native_store is not None else len(self._python_cells)
+        )
 
     def _key(self, x: float, y: float, z: float) -> tuple[int, int, int]:
         return (
@@ -184,19 +189,29 @@ class GrowingOccupancy2D:
         top = 0
 
         while need_min_x < self._origin_x - 1e-9:
-            add = max(self.expand_chunk_cells, int(math.ceil((self._origin_x - need_min_x) / self.resolution)))
+            add = max(
+                self.expand_chunk_cells,
+                int(math.ceil((self._origin_x - need_min_x) / self.resolution)),
+            )
             left += add
             self._origin_x -= add * self.resolution
         while need_max_x > cur_max_x + 1e-9:
-            add = max(self.expand_chunk_cells, int(math.ceil((need_max_x - cur_max_x) / self.resolution)))
+            add = max(
+                self.expand_chunk_cells, int(math.ceil((need_max_x - cur_max_x) / self.resolution))
+            )
             right += add
             cur_max_x += add * self.resolution
         while need_min_y < self._origin_y - 1e-9:
-            add = max(self.expand_chunk_cells, int(math.ceil((self._origin_y - need_min_y) / self.resolution)))
+            add = max(
+                self.expand_chunk_cells,
+                int(math.ceil((self._origin_y - need_min_y) / self.resolution)),
+            )
             bottom += add
             self._origin_y -= add * self.resolution
         while need_max_y > cur_max_y + 1e-9:
-            add = max(self.expand_chunk_cells, int(math.ceil((need_max_y - cur_max_y) / self.resolution)))
+            add = max(
+                self.expand_chunk_cells, int(math.ceil((need_max_y - cur_max_y) / self.resolution))
+            )
             top += add
             cur_max_y += add * self.resolution
 
@@ -238,12 +253,7 @@ class GrowingOccupancy2D:
         if len(xy) > 0:
             self._expand_to_include(xy[:, 0], xy[:, 1])
             row, col = self._world_to_rc(xy[:, 0], xy[:, 1])
-            in_bounds = (
-                (row >= 0)
-                & (row < self._height)
-                & (col >= 0)
-                & (col < self._width)
-            )
+            in_bounds = (row >= 0) & (row < self._height) & (col >= 0) & (col < self._width)
             self._values[row[in_bounds], col[in_bounds]] = GDK_OCCUPIED
 
         if robot_xy is not None:
@@ -270,5 +280,3 @@ class GrowingOccupancy2D:
         # Only paint unknown → free; do not erase occupied hits under the robot.
         unknown = patch == GDK_UNKNOWN
         patch[disk & unknown] = GDK_FREE
-
-

@@ -3,29 +3,39 @@
 Uses the caller interpreter's existing dependencies, never installs dependencies
 or changes its environment. Native loop regression runs separately.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import zipfile
+from pathlib import Path
 
 
 def main():
     if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "--native"):
-        raise SystemExit("Usage: python scripts/verify_wheel.py dist/robot_mapping-*.whl [--native]")
+        raise SystemExit(
+            "Usage: python scripts/verify_wheel.py dist/robot_mapping-*.whl [--native]"
+        )
     wheel = Path(sys.argv[1]).resolve(strict=True)
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
-        assert not any("g2_omnipicker" in name or name.endswith("adapters/gdk.py")
-                       for name in names)
-        for forbidden in ("robot_mapping/api.py", "robot_mapping/session_run.py",
-                          "robot_mapping/adapters/", "robot_mapping/storage/",
-                          "robot_mapping/view/"):
-            assert not any(name.startswith(forbidden) or name.endswith(forbidden) for name in names), forbidden
+        assert not any(
+            "g2_omnipicker" in name or name.endswith("adapters/gdk.py") for name in names
+        )
+        for forbidden in (
+            "robot_mapping/api.py",
+            "robot_mapping/session_run.py",
+            "robot_mapping/adapters/",
+            "robot_mapping/storage/",
+            "robot_mapping/view/",
+        ):
+            assert not any(
+                name.startswith(forbidden) or name.endswith(forbidden) for name in names
+            ), forbidden
         assert "robot_mapping/resources/generic.json" in names
         assert "robot_mapping/resources/user.json" in names
         generic = json.loads(archive.read("robot_mapping/resources/generic.json"))
@@ -34,9 +44,22 @@ def main():
     with tempfile.TemporaryDirectory(prefix="robot-mapping-wheel-") as scratch:
         root = Path(scratch)
         target = root / "site"
-        subprocess.run([sys.executable, "-m", "pip", "install", "--no-index", "--no-deps",
-                        "--target", str(target), str(wheel)], check=True, cwd=root)
-        script = r'''
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-index",
+                "--no-deps",
+                "--target",
+                str(target),
+                str(wheel),
+            ],
+            check=True,
+            cwd=root,
+        )
+        script = r"""
 import importlib, importlib.abc, json, sys
 from pathlib import Path
 target = Path(sys.argv[1])
@@ -84,15 +107,29 @@ if sys.argv[2] == '--native':
 print(json.dumps({'wheel_import': str(robot_mapping.__file__),
                   'isolated_core': 'PASS', 'cli': 'PASS',
                   'native_doctor': 'PASS' if sys.argv[2]=='--native' else 'NOT_REQUESTED'}))
-'''
+"""
         native = "--native" if len(sys.argv) == 3 else ""
-        result = subprocess.run([sys.executable, "-I", "-c", script, str(target), native], cwd=root,
-                                capture_output=True, text=True, timeout=60)
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", script, str(target), native],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         if result.returncode:
             raise RuntimeError(result.stdout + result.stderr)
         print(result.stdout)
-    print(json.dumps({"wheel": str(wheel), "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
-                      "relocation": "PASS", "dependencies_installed": False}, indent=2))
+    print(
+        json.dumps(
+            {
+                "wheel": str(wheel),
+                "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+                "relocation": "PASS",
+                "dependencies_installed": False,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
