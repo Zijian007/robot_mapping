@@ -24,6 +24,17 @@ from .settings import (
 )
 
 DEFAULT_CONFIG = Path(__file__).parent / "resources" / "generic.json"
+# Counts and evidence scores must stay integers: truncating 2.5 would change the rule.
+STRICT_INTEGERS = frozenset(
+    {
+        "projected_min_observations",
+        "score_hit",
+        "score_miss",
+        "score_max",
+        "score_min",
+        "score_occupied",
+    }
+)
 Section = TypeVar("Section")
 
 
@@ -65,9 +76,10 @@ def _read_section(section_type: type[Section], profile: Mapping[str, Any]) -> Se
     constructor_fields = {}
     for field in fields(section_type):
         value = profile[field.name]
+        if value is None:
+            raise ValueError(f"{field.name} must not be null")
         scalar_type = annotations[field.name]
-        # Counts must remain integers: truncating 2.5 would change the safety setting.
-        if scalar_type in (int, float, str, bool) and field.name != "projected_min_observations":
+        if scalar_type in (int, float, str, bool) and field.name not in STRICT_INTEGERS:
             value = scalar_type(value)
         constructor_fields[field.name] = value
     return section_type(**constructor_fields)
@@ -99,10 +111,6 @@ def settings_from_profile(profile: dict[str, Any], config_path: str | Path) -> M
     grid = resolved["grid"]
     online = resolved["online"]
     body_filter = resolved["body_filter"]
-    if grid["projected_max_range"] is None:
-        grid["projected_max_range"] = grid["max_ray_range"]
-    if online["voxel_max_rays"] is None:
-        online["voxel_max_rays"] = grid["max_rays"]
     for key in ("urdf_file", "package_path"):
         body_filter[key] = _resource_path(body_filter.get(key, ""), config_path.parent)
     for sensor in ("front", "back"):
@@ -174,6 +182,15 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("grid.projected_min_observations must be an integer in [1, 127]")
     if settings.grid.projected_max_range <= 0:
         raise ValueError("grid.projected_max_range must be positive")
+    from .core.ray_grid import validate_score_rules
+
+    grid = settings.grid
+    try:
+        validate_score_rules(
+            grid.score_hit, grid.score_miss, grid.score_max, grid.score_min, grid.score_occupied
+        )
+    except ValueError as error:
+        raise ValueError(f"grid.{error}") from None
     if settings.grid.free_space_mode == "projected" and not settings.grid.ray_clearing:
         raise ValueError("projected free space requires grid.ray_clearing")
     if settings.online.voxel_clearing and not settings.grid.ray_clearing:

@@ -17,6 +17,33 @@ from robot_mapping.backends.ray_native import kernels
 from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN
 from .spatial import GrowingOccupancy2D
 
+SCORE_RULES = ("score_hit", "score_miss", "score_max", "score_min", "score_occupied")
+
+
+def validate_score_rules(score_hit, score_miss, score_max, score_min, score_occupied):
+    """Check per-layer evidence rules; scores are stored as int8."""
+    values = dict(
+        score_hit=score_hit,
+        score_miss=score_miss,
+        score_max=score_max,
+        score_min=score_min,
+        score_occupied=score_occupied,
+    )
+    for name, value in values.items():
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+            raise ValueError(f"{name} must be an integer")
+    if not 1 <= score_hit <= 127:
+        raise ValueError("score_hit must be in [1, 127]")
+    if not 1 <= score_miss <= 127:
+        raise ValueError("score_miss must be in [1, 127]")
+    if not -128 <= score_min <= -1:
+        raise ValueError("score_min must be in [-128, -1]")
+    if not 1 <= score_occupied <= score_max <= 127:
+        raise ValueError(
+            "score_occupied/score_max must satisfy 1 <= score_occupied <= score_max <= 127"
+        )
+    return tuple(int(value) for value in values.values())
+
 
 class RayOccupancy2D(GrowingOccupancy2D):
     def __init__(
@@ -28,9 +55,21 @@ class RayOccupancy2D(GrowingOccupancy2D):
         free_space_mode="height_complete",
         projected_min_observations=2,
         projected_max_range=None,
+        score_hit=2,
+        score_miss=1,
+        score_max=8,
+        score_min=-4,
+        score_occupied=3,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        (
+            self.score_hit,
+            self.score_miss,
+            self.score_max,
+            self.score_min,
+            self.score_occupied,
+        ) = validate_score_rules(score_hit, score_miss, score_max, score_min, score_occupied)
         if (
             not np.isfinite([height_resolution, max_ray_range]).all()
             or min(height_resolution, max_ray_range) <= 0
@@ -310,16 +349,24 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 self._projected_counts,
                 self.projected_min_observations,
                 self.projected_max_range,
+                self.score_hit,
+                self.score_miss,
+                self.score_min,
+                self.score_max,
+                self.score_occupied,
             )
             self._last_footprint_xy = None if robot_xy is None else tuple(robot_xy)
             return
         hits = np.unique(self._keys(rays[distances <= self.max_ray_range, 3:]))
         misses = np.setdiff1d(self._free_keys(self._select_rays(rays)), hits, assume_unique=True)
         scores = self._scores.reshape(-1)
-        scores[misses] = np.maximum(scores[misses] - 1, -4)
-        scores[hits] = np.minimum(scores[hits] + 2, 8)
-        # Two distinct observations confirm occupation. Single-hit candidates
-        # stay unknown, even if another height in the same column is free.
+        # Widen before arithmetic: configured steps may exceed the int8 range.
+        scores[misses] = np.maximum(
+            scores[misses].astype(np.int16) - self.score_miss, self.score_min
+        )
+        scores[hits] = np.minimum(scores[hits].astype(np.int16) + self.score_hit, self.score_max)
+        # A layer is occupied at score_occupied (default: two distinct hits). Lower
+        # candidates stay unknown, even if another height in the same column is free.
         # Recompute only columns touched by this observation. Include the prior
         # footprint so its temporary unknown->free paint keeps the old semantics.
         depth = self._scores.shape[2]
@@ -334,7 +381,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
             columns.append((rr[:, None] * self._width + cc).ravel())
         columns = np.unique(np.concatenate(columns))
         changed = self._scores.reshape(-1, depth)[columns]
-        occupied = (changed >= 3).any(axis=1)
+        occupied = (changed >= self.score_occupied).any(axis=1)
         free = (changed < 0).all(axis=1)
         if self._projected_counts is not None:
             free = (

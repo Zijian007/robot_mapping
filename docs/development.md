@@ -19,9 +19,25 @@ python -m robot_mapping doctor
 
 使用默认 LIO 时，另行安装符合本包接口要求的 [FAST-LIO2](../../fastlio2/README.md)，
 或通过 `LioBackend` 注入其他实现。启用回环时安装 `.[loop]` 和带收敛状态、GIL 补丁的
-FastVGICP。回环使用支持 NumPy 2 的 `gtsam==4.2.2+numpy2.1` 构建，
-从本地构建或相应 wheelhouse 安装；无需降级 NumPy。
+FastVGICP。回环使用支持 NumPy 2 的 `gtsam==4.2.2+numpy2.1` 构建，无需降级 NumPy。
 这些依赖均为算法后端，不需要通过 GDK 应用安装。
+
+### 构建回环后端 wheel
+
+只有升级 GTSAM、FastVGICP 或 pybind11 时才需要重新编译，已有 wheel 可直接安装：
+
+```bash
+PYTHON=/path/to/venv/bin/python bash scripts/build_loop_backends.sh [all|gtsam|fast-gicp]
+```
+
+- 源码和中间文件放在 `${XDG_CACHE_HOME:-~/.cache}/robot_mapping/loop-backends`（`WORK_DIR` 可覆盖），
+  可随时删除；wheel 输出到 `dist/`（`OUTPUT` 可覆盖）。
+- GTSAM 4.2.2 由 `patch_gtsam.py` 改用解释器中的 pybind11 2.12+，版本标为 `4.2.2+numpy2.1`；
+  FastVGICP 固定修订，由 `patch_fast_gicp.py` 增加收敛状态和 GIL 释放。
+- `package_loop_backends.py` 把依赖的动态库打进 wheel，RPATH 改为 `$ORIGIN`，安装后不依赖构建目录。
+- 构建结束时从临时目录安装新 wheel，执行 `robot_mapping doctor --loop`；不改动所选解释器的环境。
+- 并行数默认取 CPU 亲和度允许的核数（`JOBS=N` 可覆盖）。GTSAM 绑定单个编译进程峰值约 6GB 内存，
+  在 Orin 上全量编译需要数十分钟。
 
 ```bash
 # 仅检查已选用的后端，不连接硬件

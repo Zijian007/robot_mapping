@@ -202,10 +202,23 @@ def test_native_store_serializes_concurrent_insertion_and_snapshots():
 @pytest.mark.parametrize("max_rays", [1, 2, 19, 64])
 @pytest.mark.parametrize("free_space_mode", ["height_complete", "projected"])
 @pytest.mark.parametrize(
-    "projection_params", [{}, {"projected_min_observations": 4, "projected_max_range": 1.25}]
+    "grid_params",
+    [
+        {},
+        {"projected_min_observations": 4, "projected_max_range": 1.25},
+        {"score_hit": 1, "score_miss": 2, "score_max": 4, "score_min": -2, "score_occupied": 2},
+        # Extremes exercise int8 saturation without overflow in both backends.
+        {
+            "score_hit": 100,
+            "score_miss": 100,
+            "score_max": 127,
+            "score_min": -128,
+            "score_occupied": 1,
+        },
+    ],
 )
 def test_fused_grid_matches_reference_with_limits_growth_and_footprints(
-    monkeypatch, max_rays, free_space_mode, projection_params
+    monkeypatch, max_rays, free_space_mode, grid_params
 ):
     rng = np.random.default_rng(206)
     pair = [
@@ -217,7 +230,7 @@ def test_fused_grid_matches_reference_with_limits_growth_and_footprints(
             max_rays=max_rays,
             max_ray_range=3.0,
             free_space_mode=free_space_mode,
-            **projection_params,
+            **grid_params,
         )
         for _ in range(2)
     ]

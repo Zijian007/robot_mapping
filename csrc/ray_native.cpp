@@ -383,7 +383,7 @@ py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_h
 
 PYBIND11_MODULE(_ray_native, m) {
   m.doc() = "GIL-free ray kernels and persistent voxel storage";
-  m.attr("API_VERSION") = 7;
+  m.attr("API_VERSION") = 8;
   py::class_<VoxelIndex>(m, "VoxelIndex")
       .def(py::init<>())
       .def("add", [](VoxelIndex& index, Ints keys) { index.change(keys, true); })
@@ -419,5 +419,7 @@ PYBIND11_MODULE(_ray_native, m) {
         py::arg("height_resolution"), py::arg("max_range"), py::arg("max_rays"),
         py::arg("free_radius"), py::arg("previous"), py::arg("current"),
         py::arg("projected_counts").noconvert() = py::none(),
-        py::arg("projected_min_observations") = 2, py::arg("projected_max_range") = py::none());
+        py::arg("projected_min_observations") = 2, py::arg("projected_max_range") = py::none(),
+        py::arg("score_hit") = 2, py::arg("score_miss") = 1, py::arg("score_min") = -4,
+        py::arg("score_max") = 8, py::arg("score_occupied") = 3);
 }

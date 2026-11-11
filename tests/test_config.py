@@ -110,8 +110,8 @@ def test_effective_settings_snapshot_roundtrips_all_runtime_overrides(tmp_path):
     assert json.dumps(user, sort_keys=True) == original
 
 
-@pytest.mark.parametrize("budget", [None, 2048])
-def test_voxel_budget_legacy_fallback_and_explicit_override_roundtrip(tmp_path, budget):
+@pytest.mark.parametrize("budget", [None, 512])
+def test_voxel_budget_is_independent_of_grid_budget_and_roundtrips(tmp_path, budget):
     from robot_mapping.config import profile_from_settings, settings_from_profile, validate_settings
 
     profile = {"grid": {"max_rays": 8192}}
@@ -121,13 +121,13 @@ def test_voxel_budget_legacy_fallback_and_explicit_override_roundtrip(tmp_path, 
     settings = settings_from_profile(profile, path)
     validate_settings(settings)
     assert settings.grid.max_rays == 8192
-    assert settings.online.voxel_max_rays == (8192 if budget is None else budget)
+    assert settings.online.voxel_max_rays == (2048 if budget is None else budget)
     snapshot = profile_from_settings(settings, profile)
     assert snapshot["online"]["voxel_max_rays"] == settings.online.voxel_max_rays
     assert settings_from_profile(snapshot, path) == settings
 
 
-@pytest.mark.parametrize("budget", [0, -1])
+@pytest.mark.parametrize("budget", [0, -1, None])
 def test_voxel_budget_must_be_positive(budget):
     from robot_mapping.config import settings_from_profile, validate_settings
 
@@ -162,7 +162,7 @@ def test_invalid_projected_observation_count_rejected(value):
         )
 
 
-@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf")])
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), None])
 def test_invalid_projected_range_rejected(value):
     from robot_mapping.config import settings_from_profile, validate_settings
 
@@ -170,9 +170,39 @@ def test_invalid_projected_range_rejected(value):
         validate_settings(settings_from_profile({"grid": {"projected_max_range": value}}, "unused"))
 
 
-def test_old_profile_keeps_two_observations_and_original_range():
+@pytest.mark.parametrize(
+    "grid, message",
+    [
+        ({"score_hit": 2.5}, "grid.score_hit"),
+        ({"score_occupied": 9}, "grid.score_occupied"),
+        ({"score_min": 1}, "grid.score_min"),
+        ({"score_miss": None}, "score_miss"),
+    ],
+)
+def test_invalid_score_rules_rejected_without_truncation(grid, message):
+    from robot_mapping.config import settings_from_profile, validate_settings
+
+    with pytest.raises(ValueError, match=message):
+        validate_settings(settings_from_profile({"grid": grid}, "unused"))
+
+
+def test_score_rules_reach_the_grid():
+    from robot_mapping.config import settings_from_profile, validate_settings
+
+    profile = {"grid": {"score_max": 4, "score_miss": 2}}
+    settings = settings_from_profile(profile, "unused")
+    validate_settings(settings)
+    assert (settings.grid.score_hit, settings.grid.score_miss) == (2, 2)
+    assert (settings.grid.score_max, settings.grid.score_min, settings.grid.score_occupied) == (
+        4,
+        -4,
+        3,
+    )
+
+
+def test_projection_defaults_are_explicit():
     from robot_mapping.config import settings_from_profile
 
     settings = settings_from_profile({"grid": {"max_ray_range": 12.0}}, "unused")
     assert settings.grid.projected_min_observations == 2
-    assert settings.grid.projected_max_range == 12.0
+    assert settings.grid.projected_max_range == 30.0

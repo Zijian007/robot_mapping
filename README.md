@@ -39,7 +39,7 @@ python -m robot_mapping doctor
 | 基础算法、JSON 配置、栅格和地图管理 | NumPy，由基础安装自动安装 |
 | YAML 配置 | `python -m pip install '.[runtime]'` |
 | 默认 LIO 与去畸变 | 另行安装符合接口要求的 FAST-LIO2；也可注入自定义 `LioBackend` |
-| 回环 | `python -m pip install --find-links /path/to/wheels '.[loop]'` 安装 SciPy 和支持 NumPy 2 的 `gtsam==4.2.2+numpy2.1` 本地构建，另行安装带收敛状态与 GIL 补丁的 FastVGICP |
+| 回环 | `python -m pip install --find-links /path/to/wheels '.[loop]' pygicp` 安装 SciPy、支持 NumPy 2 的 `gtsam==4.2.2+numpy2.1` 和带收敛状态与 GIL 补丁的 FastVGICP；这两个 wheel 由 `scripts/build_loop_backends.sh` 构建 |
 
 基础安装不自动安装 FAST-LIO2 或 FastVGICP。安装相应后端后，可通过
 `python -m robot_mapping doctor --native` 或 `python -m robot_mapping doctor --loop`
@@ -92,7 +92,7 @@ python -m pip uninstall robot-mapping
 
 ## 配置分层
 
-算法固有超参数只写在 `src/robot_mapping/resources/generic.json`（LIO、栅格、回环、盒子过滤几何）。用户文件只覆盖本机项：雷达选择、标定、URDF 路径、采集源。`load_settings` / `resolve_profile` 在加载时把用户文件叠到算法默认上。完整旧配置仍然可用，因为再叠一次是幂等的。存盘地图带合并后的快照，默认值以后改了也不影响回放。
+算法固有超参数只写在 `src/robot_mapping/resources/generic.json`（LIO、栅格、回环、盒子过滤几何）。用户文件只覆盖本机项：雷达选择、标定、URDF 路径、采集源。`load_settings` / `resolve_profile` 在加载时把用户文件叠到算法默认上。完整配置（如地图保存的快照）也可直接加载，因为再叠一次是幂等的。存盘地图带合并后的快照，默认值以后改了也不影响回放。
 
 空标定模板是 `resources/user.json`，不含算法旋钮。
 保存快照通过 `profile_from_settings` 将实际运行参数完整写回标准配置字段，包括调用方的参数覆盖，
@@ -102,11 +102,11 @@ python -m pip uninstall robot-mapping
 
 核心不选择地图原点或初始航向。`MappingFrontend` 默认保留 LIO 坐标，应用通过
 `initialize_map(mean_acc, generation)` 注入初始化策略。`OnlineMap.set_map_alignment`
-只接受固定的 `map_from_lio`、`tracking_from_footprint` 和地图 Z 坐标下的
-`height_bounds`，负责一致地应用到点云、自由区域和回环重建，并随保存快照冻结。
+只接受固定的 `map_from_lio` 和 `tracking_from_footprint`，负责一致地应用到点云、
+自由区域和回环重建，并随保存快照冻结。`grid.min_height/max_height` 始终是地图 Z 坐标。
 `tracking_from_footprint` 将自由区域中心坐标系变换到 LIO 跟踪的传感器坐标系。
 
-G2 的初始 `base_link` 原点、水平航向、重力向上和高度参数换算由
+G2 的初始 `base_link` 原点、水平航向和重力向上由
 `robot_mapping_gdk/map_frame.py` 实现。核心中的 `gravity_aligned_frame` 仅按调用方
 给定的 up、forward、origin 三个向量计算坐标变换，不选择机器人坐标系。
 
@@ -132,7 +132,7 @@ G2 的初始 `base_link` 原点、水平航向、重力向上和高度参数换�
 本体过滤先完成历史 TF 验证，再按碰撞包围盒筛选点。
 算法规则和参数见 [栅格与点云清理](docs/mapping.md)，模块入口见 [架构说明](docs/architecture.md)。
 
-已安装的扩展要求 API v7 或更新；版本不兼容时明确报错，未安装时使用 Python/NumPy 参考实现。
+已安装的扩展要求 API v8 或更新；版本不兼容时明确报错，未安装时使用 Python/NumPy 参考实现。
 `doctor` 显示各算法后端及 `ray_native_api`。点云导出不保证点的排列顺序。
 源码构建需要 C++17 编译器和 pybind11；安装已编译 wheel 不需要编译工具。
 

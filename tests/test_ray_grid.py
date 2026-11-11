@@ -141,3 +141,55 @@ def test_footprint_does_not_hide_single_hit_or_confirmed_obstacle():
     assert cell(grid, 0.225) == 100
     grid.ingest_rays(ray(-10), robot_xy=(-10.0, 0.0))
     assert cell(grid, 0.225) == 100  # growth and footprint refresh retain the hit
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize(
+    "rules, hits, misses_to_unblock",
+    [
+        # Defaults: four hits saturate at 8; six misses drop below occupied=3.
+        ({}, 4, 6),
+        # A lower cap clears a saturated trail after two misses.
+        ({"score_max": 4}, 4, 2),
+        # Stronger misses clear faster even with the default cap.
+        ({"score_miss": 3}, 4, 2),
+        # Confirm on the first hit; a single miss clears it again.
+        ({"score_occupied": 2}, 1, 1),
+    ],
+)
+def test_score_rules_control_trail_clearing(monkeypatch, native, rules, hits, misses_to_unblock):
+    from robot_mapping.core import ray_grid
+
+    if native and ray_grid.kernels is None:
+        pytest.skip("native ray kernels unavailable")
+    if not native:
+        monkeypatch.setattr(ray_grid, "kernels", None)
+    grid = RayOccupancy2D(min_height=0.4, max_height=0.6, **rules)
+    for _ in range(hits):
+        grid.ingest_rays(ray(2))
+    assert cell(grid, 2) == 100
+    for _ in range(misses_to_unblock - 1):
+        grid.ingest_rays(ray(4))
+    assert cell(grid, 2) == 100
+    grid.ingest_rays(ray(4))
+    assert cell(grid, 2) != 100
+    assert grid._scores.min() >= grid.score_min and grid._scores.max() <= grid.score_max
+
+
+@pytest.mark.parametrize(
+    "rules, message",
+    [
+        ({"score_hit": 0}, "score_hit"),
+        ({"score_miss": 128}, "score_miss"),
+        ({"score_min": 0}, "score_min"),
+        ({"score_min": -129}, "score_min"),
+        ({"score_occupied": 9}, "score_occupied"),
+        ({"score_max": 128}, "score_max"),
+        ({"score_occupied": 0}, "score_occupied"),
+        ({"score_hit": 2.0}, "score_hit"),
+        ({"score_miss": True}, "score_miss"),
+    ],
+)
+def test_invalid_score_rules_rejected(rules, message):
+    with pytest.raises(ValueError, match=message):
+        RayOccupancy2D(**rules)

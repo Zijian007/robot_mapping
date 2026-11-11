@@ -25,11 +25,16 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
                  double max_height, double height_resolution, double max_range, I max_rays,
                  double free_radius, Footprint previous, Footprint current,
                  std::optional<Scores> projected_counts, I projected_min_observations,
-                 std::optional<double> projected_max_range) {
+                 std::optional<double> projected_max_range, int score_hit, int score_miss,
+                 int score_min, int score_max, int score_occupied) {
   const double planar_range = projected_max_range.value_or(max_range);
   if (!std::isfinite(planar_range) || planar_range <= 0 || projected_min_observations < 1 ||
       projected_min_observations > 127)
     throw std::invalid_argument("invalid projected free-space parameters");
+  // Same bounds as ray_grid.validate_score_rules; scores are stored as int8.
+  if (score_hit < 1 || score_hit > 127 || score_miss < 1 || score_miss > 127 || score_min < -128 ||
+      score_min > -1 || score_occupied < 1 || score_occupied > score_max || score_max > 127)
+    throw std::invalid_argument("invalid grid score rules");
   if (rays.ndim() != 2 || rays.shape(1) != 6 || distances.ndim() != 1 ||
       distances.shape(0) != rays.shape(0) || groups.ndim() != 2 || groups.shape(1) != 5 ||
       groups.shape(0) != rays.shape(0) || scores.ndim() != 3 || values.ndim() != 2 ||
@@ -130,7 +135,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
   // Mark all hits first: they win over free traversal in this observation.
   for (I key : hits)
     if (first(seen, key)) {
-      score[key] = std::min<int>(score[key] + 2, 8);
+      score[key] = static_cast<std::int8_t>(std::min<int>(score[key] + score_hit, score_max));
       touch(key / depth);
       if (planar_count) {
         first(planar_hits, key / depth);
@@ -150,7 +155,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
       const I layer = std::min(floor_index((altitude - min_height) / height_resolution), depth - 1);
       const I key = (row * width + col) * depth + layer;
       if (first(seen, key)) {
-        score[key] = std::max<int>(score[key] - 1, -4);
+        score[key] = static_cast<std::int8_t>(std::max<int>(score[key] - score_miss, score_min));
         touch(key / depth);
       }
     }
@@ -198,7 +203,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
     bool occupied = false, free = true, positive = false;
     for (I layer = 0; layer < depth; ++layer) {
       const int evidence = score[column * depth + layer];
-      occupied = occupied || evidence >= 3;
+      occupied = occupied || evidence >= score_occupied;
       free = free && evidence < 0;
       positive = positive || evidence > 0;
     }

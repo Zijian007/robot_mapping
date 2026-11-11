@@ -83,14 +83,12 @@ def test_invalid_initial_acceleration_rejects_alignment(acc):
 
 
 def test_core_accepts_arbitrary_origin_and_explicit_projection_geometry():
-    mapping = OnlineMap()
+    mapping = OnlineMap(min_height=30.1, max_height=32.0)
     alignment = np.eye(4)
     alignment[:3, 3] = [10, 20, 30]
     footprint = np.eye(4)
     footprint[:3, 3] = [0.5, 0.2, 0]
-    assert mapping.set_map_alignment(
-        alignment, tracking_from_footprint=footprint, height_bounds=(30.1, 32.0)
-    )
+    assert mapping.set_map_alignment(alignment, tracking_from_footprint=footprint)
     mapping.ingest_local_points(pose(), [[2, 2, 0], [3, 3, 1]])
     assert mapping.grid.occupied_count() == 1
     assert value_at(mapping.grid, 10.5, 20.2) == 0

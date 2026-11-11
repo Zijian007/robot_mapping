@@ -195,18 +195,21 @@ def test_real_vgicp_low_overlap_is_rejected():
 def test_actual_detection_optimizes_and_aligns_revisited_cloud(tilted, translated):
     cfg = LoopConfig(enabled=True, min_keyframe_gap=4, neighbor_keyframes=0, vgicp_num_threads=1)
     graph = PoseGraphBackend(PoseGraphNoise(odom_sigmas=(0.2,) * 6, loop_sigmas=(0.001,) * 6))
-    om = OnlineMap(keyframe_dist_th=0.1, pose_graph=graph, loop_config=cfg)
     alignment = gravity_aligned_frame([-0.15, 0.01, 1.0], [1, 0, 0]) if tilted else np.eye(4)
     if translated:
         tracking_from_footprint = np.eye(4)
         tracking_from_footprint[:3, 3] = [-0.19, -0.205, -0.32]
         alignment[:3, 3] = -alignment[:3, :3] @ tracking_from_footprint[:3, 3]
-        assert om.set_map_alignment(
-            alignment,
-            tracking_from_footprint=tracking_from_footprint,
-            height_bounds=(-0.25 + alignment[2, 3], 1.8 + alignment[2, 3]),
+        om = OnlineMap(
+            keyframe_dist_th=0.1,
+            pose_graph=graph,
+            loop_config=cfg,
+            min_height=-0.25 + alignment[2, 3],
+            max_height=1.8 + alignment[2, 3],
         )
+        assert om.set_map_alignment(alignment, tracking_from_footprint=tracking_from_footprint)
     else:
+        om = OnlineMap(keyframe_dist_th=0.1, pose_graph=graph, loop_config=cfg)
         assert om.set_map_alignment(alignment)
     height_bounds = (om.grid.min_height, om.grid.max_height)
     scene = cloud(seed=19, size=600)

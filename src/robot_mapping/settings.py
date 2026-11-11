@@ -70,6 +70,11 @@ class GridSettings:
     free_space_mode: str
     projected_min_observations: int
     projected_max_range: float
+    score_hit: int
+    score_miss: int
+    score_max: int
+    score_min: int
+    score_occupied: int
 
 
 @dataclass(frozen=True)

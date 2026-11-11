@@ -2,6 +2,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
+
 from robot_mapping.backends import capabilities
 
 

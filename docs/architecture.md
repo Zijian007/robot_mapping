@@ -63,7 +63,7 @@ from robot_mapping.core.map_types import MapSnapshot, SE3Pose
 from robot_mapping.settings import MappingSettings
 ```
 
-使用 GDK 应用时，本机调参编辑 `robot_mapping_gdk/g2_mapping.json`。
+使用 GDK 应用时，本机调参编辑 `robot_mapping_gdk/g2_mapping.yaml`（全部参数带注释）。
 录制和回放是应用内部模块，在应用源码环境中导入：
 
 ```python

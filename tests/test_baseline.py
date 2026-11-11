@@ -15,9 +15,7 @@ from robot_mapping.core.pose_math import gravity_aligned_frame
 
 @pytest.mark.parametrize("tilted", [False, True])
 def test_map_matches_fixed_geometry_and_encoding(tilted, monkeypatch):
-    fixture = json.loads(
-        (Path(__file__).parent / "fixtures/map_snapshot.json").read_text()
-    )
+    fixture = json.loads((Path(__file__).parent / "fixtures/map_snapshot.json").read_text())
     expected = fixture["tilted" if tilted else "level"]
     mapping = OnlineMap(voxel_resolution=0.15, grid_resolution=0.05, keyframe_dist_th=0.1)
     with monkeypatch.context() as context:

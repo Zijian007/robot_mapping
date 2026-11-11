@@ -60,6 +60,11 @@ class OnlineMap:
         free_space_mode="height_complete",
         projected_min_observations=2,
         projected_max_range=None,
+        score_hit=2,
+        score_miss=1,
+        score_max=8,
+        score_min=-4,
+        score_occupied=3,
         grid_update_interval_s=0.0,
         voxel_clearing=False,
         voxel_clear_observations=3,
@@ -90,7 +95,7 @@ class OnlineMap:
             self._voxel_params.update(
                 clear_observations=voxel_clear_observations,
                 max_ray_range=max_ray_range,
-                # None preserves the shared budget used by older callers/configs.
+                # None reuses the 2D ray budget.
                 max_rays=max_rays if voxel_max_rays is None else voxel_max_rays,
             )
         self._grid_update_interval_s = float(grid_update_interval_s)
@@ -107,6 +112,11 @@ class OnlineMap:
                 free_space_mode=free_space_mode,
                 projected_min_observations=projected_min_observations,
                 projected_max_range=projected_max_range,
+                score_hit=score_hit,
+                score_miss=score_miss,
+                score_max=score_max,
+                score_min=score_min,
+                score_occupied=score_occupied,
             )
         else:
             self._grid_type = GrowingOccupancy2D
@@ -212,10 +222,10 @@ class OnlineMap:
         self._map_from_lio = np.eye(4)
         self._tracking_from_footprint = np.eye(4)
 
-    def set_map_alignment(
-        self, map_from_lio, *, generation=None, tracking_from_footprint=None, height_bounds=None
-    ):
-        """Apply caller-selected coordinates, footprint extrinsic and map-Z bounds.
+    def set_map_alignment(self, map_from_lio, *, generation=None, tracking_from_footprint=None):
+        """Apply caller-selected coordinates and footprint extrinsic.
+
+        Grid height bounds are configured map-Z values and are not changed here.
 
         No origin/heading policy is selected here. All geometry is fixed for
         this generation, including asynchronous loop reconstruction.
@@ -232,13 +242,6 @@ class OnlineMap:
         )
         if not is_se3(base):
             raise ValueError("invalid tracking_from_footprint extrinsic")
-        bounds = (
-            (self._grid_params["min_height"], self._grid_params["max_height"])
-            if height_bounds is None
-            else height_bounds
-        )
-        if len(bounds) != 2 or not np.isfinite(bounds).all() or bounds[0] > bounds[1]:
-            raise ValueError("invalid map height bounds")
         with self._lock:
             if (
                 self._keyframes
@@ -248,7 +251,6 @@ class OnlineMap:
                 return False
             self._map_from_lio = map_from_tracking.copy()
             self._tracking_from_footprint = base.copy()
-            self.grid.min_height, self.grid.max_height = map(float, bounds)
             return True
 
     def start_mapping(self, *, reset_lio=None):
