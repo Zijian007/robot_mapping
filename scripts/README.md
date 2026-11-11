@@ -1,28 +1,17 @@
-# 工具索引
+# 算法开发工具
 
-以下命令从 `robot_mapping/` 执行。部署脚本保持现有路径，离线恢复包也使用这些路径。
+从 `robot_mapping/` 执行，使用独立开发环境或调用方提供的 Python 环境，
+无需 GDK 应用。环境安装与 wheel 构建见 [开发指南](../docs/development.md)。
 
 | 用途 | 入口 |
 |---|---|
-| Python/C++ 规范检查 | `check_quality.py`；加 `--fix` 应用安全修复和格式化 |
-| 安装锁定运行环境 | `install_runtime.sh` / `install_runtime.py` |
-| 诊断当前安装 | 根目录 `run.sh doctor --native --loop` |
-| 执行源码测试 | `run_tests.sh`，可用 `PYTHON=.venv/bin/python` 选择解释器 |
-| 构建原生依赖 | `build_native.sh`，内部使用 `patch_fast_gicp.py` |
-| 导出锁定 wheelhouse | `runtime_bundle.py` |
-| 打包离线恢复包 | `package_runtime.py` |
-| 验证原生依赖构建 | `verify_native.py` |
-| 验证单个算法 wheel | `verify_wheel.py` |
-| 验证已安装运行环境 | `verify_runtime.py` |
-| 验证完整离线恢复包 | `verify_restore.py` |
-| 固定观测的体素存储对比 | `benchmark_voxels.py`，见 [原生体素存储](../docs/native-voxels.md) |
-| 固定观测的 2D 栅格对比与阶段测量 | `benchmark_grid.py`，见 [融合栅格更新](../docs/native-grid.md) |
-| 录包点云准备、本体过滤与双雷达合并对比 | `benchmark_preprocess.py`，见 [原生点云预处理](../docs/native-preprocess.md) |
+| Python/C++ 规范检查 | `check_quality.py` |
+| 执行源码测试 | `run_tests.sh`，使用 `PYTHON` 指定解释器 |
+| 验证算法 wheel | `verify_wheel.py` |
+| 固定观测的体素存储对比 | `benchmark_voxels.py` |
+| 固定观测的栅格对比与阶段测量 | `benchmark_grid.py` |
+| 录包预处理及双雷达合并对比 | `benchmark_preprocess.py` |
 
-安装流程见 [运行环境说明](../docs/runtime.md)，源码与 wheel 验证见
-[开发指南](../docs/development.md)。一次性实验脚本保存在本机
-`artifacts/history/20261108/build/`，其中硬编码的历史路径不是受支持的工具接口。
-
-`runtime_bundle.py --gdk-root <robot_mapping_gdk>` 同时构建独立 HAL 的 wheel。
-默认查找 GDK 仓库的相邻目录 `robot_hal`，可用 `--hal-root <path>` 指定；
-算法包本身不依赖 HAL。
+G2 应用的安装、原生依赖部署和启动工具位于
+[robot_mapping_gdk](../../robot_mapping_gdk/scripts/README.md)，不参与本算法包的独立安装和构建。
+性能工具在定位具体瓶颈时按需使用，输入和输出目录由调用方提供。

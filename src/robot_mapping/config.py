@@ -1,106 +1,33 @@
-"""Algorithm defaults in generic.json; user files overlay robot, source and switches."""
+"""Load user profiles, resolve defaults and serialize effective typed settings."""
 
 from __future__ import annotations
 
 import copy
 import json
 import math
-from dataclasses import asdict, dataclass
+import os
+from collections.abc import Iterator, Mapping
+from dataclasses import asdict, fields
 from importlib.resources import files
+from numbers import Integral
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, get_type_hints
 
 from .filters.body_filter import BodyBox
+from .settings import (
+    BodyFilterSettings,
+    GridSettings,
+    LioSettings,
+    LoopSettings,
+    MappingSettings,
+    OnlineSettings,
+)
 
 DEFAULT_CONFIG = Path(__file__).parent / "resources" / "generic.json"
+Section = TypeVar("Section")
 
 
-@dataclass(frozen=True)
-class MappingSettings:
-    config_path: Path
-    maps_root: Path
-    lidar: str
-    imu: str
-    lidar_ready: float
-    cube_side_length: float
-    det_range: float
-    filter_size_map: float
-    filter_size_surf: float
-    blind: float
-    print_interval: float
-    max_back_dt: float
-    wait_imu_s: float
-    min_imu_samples: int
-    max_scan_duration: float
-    max_lidar_frame_gap: float
-    warmup_frames: int
-    match_distance: float
-    match_iterations: int
-    plane_fit_mode: str
-    time_source: str
-    require_imu: bool
-    max_imu_gap_s: float
-    max_imu_boundary_gap_s: float
-    imu_startup_timeout_s: float
-    max_match_failures: int
-    body_filter_enabled: bool
-    body_filter_mode: str
-    body_urdf_file: Path
-    body_package_path: Path
-    body_collision_threshold: float
-    body_tf_timeout_s: float
-    front_box: BodyBox
-    back_box: BodyBox
-    grid_resolution: float
-    grid_min_height: float
-    grid_max_height: float
-    grid_margin_cells: int
-    grid_ray_clearing: bool
-    grid_update_interval_s: float
-    grid_height_resolution: float
-    grid_max_ray_range: float
-    grid_max_rays: int
-    keyframe_dist_th: float
-    keyframe_angle_th: float
-    voxel_resolution: float
-    voxel_clearing: bool
-    voxel_clear_observations: int
-    free_radius_m: float
-    map_point_stride: int
-    live_png: bool
-    live_http_port: int
-    live_refresh_hz: float
-    loop_enabled: bool
-    loop_search_radius_m: float
-    loop_min_keyframe_gap: int
-    loop_neighbor_keyframes: int
-    loop_max_correction_m: float
-    loop_max_correction_rad: float
-    loop_min_inlier_ratio: float
-    loop_max_rmse_m: float
-    loop_vgicp_resolution: float
-    loop_vgicp_max_correspondence_distance: float
-    loop_vgicp_num_threads: int
-    loop_odom_sigmas: tuple[float, float, float, float, float, float]
-    loop_loop_sigmas: tuple[float, float, float, float, float, float]
-
-    @property
-    def needs_back(self) -> bool:
-        return self.lidar == "both"
-
-    @property
-    def primary_lidar(self) -> str:
-        return "front" if self.lidar == "both" else self.lidar
-
-
-def _as_six(value: Any, name: str) -> tuple[float, float, float, float, float, float]:
-    seq = list(value)
-    if len(seq) != 6:
-        raise ValueError(f"{name} 需要 6 个数，实际 {len(seq)}")
-    return tuple(float(v) for v in seq)  # type: ignore[return-value]
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+def _deep_merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
     merged = copy.deepcopy(base)
     for key, value in overlay.items():
         if isinstance(merged.get(key), dict) and isinstance(value, dict):
@@ -115,199 +42,153 @@ def algorithm_profile() -> dict[str, Any]:
 
 
 def resolve_profile(profile: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Algorithm defaults, then the user overlay. Saved full snapshots merge idempotently."""
+    """User files and saved snapshots overlay the same algorithm defaults."""
     return _deep_merge(algorithm_profile(), profile or {})
 
 
 def load_mapping_config(path: str | Path) -> dict[str, Any]:
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as stream:
         if str(path).endswith(".json"):
-            data = json.load(f)
+            profile = json.load(stream)
         else:
             import yaml
 
-            data = yaml.safe_load(f) or {}
-    if not isinstance(data, dict):
+            profile = yaml.safe_load(stream) or {}
+    if not isinstance(profile, dict):
         raise ValueError(f"配置不是 mapping: {path}")
-    return data
+    return profile
 
 
-def _read_body_box(body: dict[str, Any], name: str) -> BodyBox:
-    nested = body.get(name)
-    if not isinstance(nested, dict):
-        raise ValueError(f"body_filter.{name} 缺少盒子边界")
-    return BodyBox(
-        **{
-            key: float(nested[key])
-            for key in ("min_x", "max_x", "min_y", "max_y", "min_z", "max_z")
-        }
+def _read_section(section_type: type[Section], profile: Mapping[str, Any]) -> Section:
+    """Coerce the existing scalar profile syntax at the configuration boundary."""
+    annotations = get_type_hints(section_type)
+    constructor_fields = {}
+    for field in fields(section_type):
+        value = profile[field.name]
+        scalar_type = annotations[field.name]
+        # Counts must remain integers: truncating 2.5 would change the safety setting.
+        if scalar_type in (int, float, str, bool) and field.name != "projected_min_observations":
+            value = scalar_type(value)
+        constructor_fields[field.name] = value
+    return section_type(**constructor_fields)
+
+
+def _resource_path(value: str | Path, profile_directory: Path) -> Path:
+    path = Path(os.path.expandvars(str(value))).expanduser()
+    return path if path.is_absolute() else profile_directory / path
+
+
+def _read_body_box(profile: Mapping[str, Any], sensor: str) -> BodyBox:
+    bounds = profile.get(sensor)
+    if not isinstance(bounds, dict):
+        raise ValueError(f"body_filter.{sensor} 缺少盒子边界")
+    return BodyBox(**{field.name: float(bounds[field.name]) for field in fields(BodyBox)})
+
+
+def _as_six(value: Any, name: str) -> tuple[float, float, float, float, float, float]:
+    sigmas = tuple(float(sigma) for sigma in value)
+    if len(sigmas) != 6:
+        raise ValueError(f"{name} 需要 6 个数，实际 {len(sigmas)}")
+    return sigmas
+
+
+def settings_from_profile(profile: dict[str, Any], config_path: str | Path) -> MappingSettings:
+    """Resolve domains once; validation runs at the session boundary."""
+    resolved = resolve_profile(profile)
+    config_path = Path(config_path).resolve()
+    grid = resolved["grid"]
+    online = resolved["online"]
+    body_filter = resolved["body_filter"]
+    if grid["projected_max_range"] is None:
+        grid["projected_max_range"] = grid["max_ray_range"]
+    if online["voxel_max_rays"] is None:
+        online["voxel_max_rays"] = grid["max_rays"]
+    for key in ("urdf_file", "package_path"):
+        body_filter[key] = _resource_path(body_filter.get(key, ""), config_path.parent)
+    for sensor in ("front", "back"):
+        body_filter[sensor] = _read_body_box(body_filter, sensor)
+    loop = online["loop"]
+    for key in ("odom_sigmas", "loop_sigmas"):
+        loop[key] = _as_six(loop[key], f"online.loop.{key}")
+    online["loop"] = _read_section(LoopSettings, loop)
+    maps_root = (resolved.get("session") or {}).get("maps_root", "maps")
+    maps_root = Path(os.path.expandvars(str(Path.cwd() / maps_root))).expanduser()
+    return MappingSettings(
+        config_path=config_path,
+        maps_root=maps_root,
+        lio=_read_section(LioSettings, resolved["lio"]),
+        body_filter=_read_section(BodyFilterSettings, body_filter),
+        grid=_read_section(GridSettings, grid),
+        online=_read_section(OnlineSettings, online),
     )
 
 
-def mapping_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
-    cfg = resolve_profile(cfg)
-    lio = cfg["lio"]
-    body = cfg["body_filter"]
-    grid = cfg["grid"]
-    online = cfg["online"]
-    loop = online["loop"]
-    session = cfg.get("session") or {}
-    maps_root = session.get("maps_root", "maps")
-    return {
-        "maps_root": str(Path.cwd() / maps_root),
-        "lidar": str(lio["lidar"]),
-        "imu": str(lio["imu"]),
-        "lidar_ready": float(lio["lidar_ready"]),
-        "cube_side_length": float(lio["cube_side_length"]),
-        "det_range": float(lio["det_range"]),
-        "filter_size_map": float(lio["filter_size_map"]),
-        "filter_size_surf": float(lio["filter_size_surf"]),
-        "blind": float(lio["blind"]),
-        "print_interval": float(lio["print_interval"]),
-        "max_back_dt": float(lio["max_back_dt"]),
-        "wait_imu_s": float(lio["wait_imu_s"]),
-        "min_imu_samples": int(lio["min_imu_samples"]),
-        "max_scan_duration": float(lio["max_scan_duration"]),
-        "max_lidar_frame_gap": float(lio["max_lidar_frame_gap"]),
-        "warmup_frames": int(lio["warmup_frames"]),
-        "match_distance": float(lio["match_distance"]),
-        "match_iterations": int(lio["match_iterations"]),
-        "plane_fit_mode": str(lio["plane_fit_mode"]),
-        "time_source": str(lio["time_source"]),
-        "require_imu": bool(lio["require_imu"]),
-        "max_imu_gap_s": float(lio["max_imu_gap_s"]),
-        "max_imu_boundary_gap_s": float(lio["max_imu_boundary_gap_s"]),
-        "imu_startup_timeout_s": float(lio["imu_startup_timeout_s"]),
-        "max_match_failures": int(lio["max_match_failures"]),
-        "body_filter_enabled": bool(body["enabled"]),
-        "body_filter_mode": str(body["mode"]),
-        "body_urdf_file": str(body.get("urdf_file", "")),
-        "body_package_path": str(body.get("package_path", "")),
-        "body_collision_threshold": float(body["collision_threshold"]),
-        "body_tf_timeout_s": float(body["tf_timeout_s"]),
-        "front_box": _read_body_box(body, "front"),
-        "back_box": _read_body_box(body, "back"),
-        "grid_resolution": float(grid["resolution"]),
-        "grid_min_height": float(grid["min_height"]),
-        "grid_max_height": float(grid["max_height"]),
-        "grid_margin_cells": int(grid["margin_cells"]),
-        "grid_ray_clearing": bool(grid["ray_clearing"]),
-        "grid_update_interval_s": float(grid["update_interval_s"]),
-        "grid_height_resolution": float(grid["height_resolution"]),
-        "grid_max_ray_range": float(grid["max_ray_range"]),
-        "grid_max_rays": int(grid["max_rays"]),
-        "keyframe_dist_th": float(online["keyframe_dist_th"]),
-        "keyframe_angle_th": float(online["keyframe_angle_th"]),
-        "voxel_resolution": float(online["voxel_resolution"]),
-        "voxel_clearing": bool(online["voxel_clearing"]),
-        "voxel_clear_observations": int(online["voxel_clear_observations"]),
-        "free_radius_m": float(online["free_radius_m"]),
-        "map_point_stride": int(online["map_point_stride"]),
-        "live_png": bool(online["live_png"]),
-        "live_http_port": int(online["live_http_port"]),
-        "live_refresh_hz": float(online["live_refresh_hz"]),
-        "loop_enabled": bool(loop["enabled"]),
-        "loop_search_radius_m": float(loop["search_radius_m"]),
-        "loop_min_keyframe_gap": int(loop["min_keyframe_gap"]),
-        "loop_neighbor_keyframes": int(loop["neighbor_keyframes"]),
-        "loop_max_correction_m": float(loop["max_correction_m"]),
-        "loop_max_correction_rad": float(loop["max_correction_rad"]),
-        "loop_min_inlier_ratio": float(loop["min_inlier_ratio"]),
-        "loop_max_rmse_m": float(loop["max_rmse_m"]),
-        "loop_vgicp_resolution": float(loop["vgicp_resolution"]),
-        "loop_vgicp_max_correspondence_distance": float(loop["vgicp_max_correspondence_distance"]),
-        "loop_vgicp_num_threads": int(loop["vgicp_num_threads"]),
-        "loop_odom_sigmas": _as_six(loop["odom_sigmas"], "online.loop.odom_sigmas"),
-        "loop_loop_sigmas": _as_six(loop["loop_sigmas"], "online.loop.loop_sigmas"),
-    }
-
-
-def settings_from_profile(
-    profile: dict[str, Any], config_path: str | Path, **overrides
-) -> MappingSettings:
-    """Build settings without command-line parsing; validate once at session entry."""
-    import os
-
-    path = Path(config_path).resolve()
-    values = mapping_defaults(profile)
-    values.update(overrides)
-    for name in ("maps_root", "body_urdf_file", "body_package_path"):
-        value = Path(os.path.expandvars(str(values[name]))).expanduser()
-        values[name] = value if value.is_absolute() or name == "maps_root" else path.parent / value
-    return MappingSettings(config_path=path, **values)
-
-
-def load_settings(path: str | Path = DEFAULT_CONFIG, **overrides) -> MappingSettings:
-    """Read a user overlay (or a full saved snapshot) on top of algorithm defaults."""
-    return settings_from_profile(load_mapping_config(path), path, **overrides)
+def load_settings(path: str | Path = DEFAULT_CONFIG) -> MappingSettings:
+    return settings_from_profile(load_mapping_config(path), path)
 
 
 def profile_from_settings(settings: MappingSettings, profile: dict[str, Any]) -> dict[str, Any]:
-    """Snapshot every runtime setting into the configuration consumed on replay.
+    """Save effective domain settings while retaining caller-owned calibration/source keys."""
+    effective = asdict(settings)
+    effective.pop("config_path")
+    effective["session"] = {"maps_root": str(effective.pop("maps_root"))}
+    for key in ("urdf_file", "package_path"):
+        effective["body_filter"][key] = str(effective["body_filter"][key])
+    snapshot = _deep_merge(resolve_profile(profile), effective)
+    snapshot.pop("effective_settings", None)
+    return snapshot
 
-    generic.json defines the supported keys. Preserve caller-owned robot/source
-    data, while replacing algorithm values with their effective typed settings.
-    """
-    defaults = algorithm_profile()
-    result = _deep_merge(defaults, profile)
-    for section, prefix in (("lio", ""), ("grid", "grid_"), ("online", "")):
-        for key in defaults[section]:
-            if key != "loop":
-                result[section][key] = getattr(settings, prefix + key)
-    result["online"]["loop"] = dict(
-        result["online"]["loop"],
-        **{key: getattr(settings, "loop_" + key) for key in defaults["online"]["loop"]},
-    )
-    aliases = {
-        "enabled": "body_filter_enabled",
-        "mode": "body_filter_mode",
-        "front": "front_box",
-        "back": "back_box",
-    }
-    for key in defaults["body_filter"]:
-        value = getattr(settings, aliases.get(key, "body_" + key))
-        result["body_filter"][key] = (
-            asdict(value)
-            if isinstance(value, BodyBox)
-            else str(value)
-            if isinstance(value, Path)
-            else value
-        )
-    result.setdefault("session", {})["maps_root"] = str(settings.maps_root)
-    result.pop("effective_settings", None)  # retired duplicate, never read by replay
-    return result
+
+def _setting_values(sections: Mapping[str, Any], prefix: str = "") -> Iterator[tuple[str, Any]]:
+    for name, value in sections.items():
+        path = f"{prefix}.{name}" if prefix else name
+        if isinstance(value, dict):
+            yield from _setting_values(value, path)
+        else:
+            yield path, value
 
 
 def validate_settings(settings: MappingSettings) -> None:
-    for name, value in vars(settings).items():
+    for name, value in _setting_values(asdict(settings)):
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"{name} 必须为有限数值")
-    if settings.lidar not in {"front", "back", "both"}:
+    if settings.lio.lidar not in {"front", "back", "both"}:
         raise ValueError("lio.lidar must be front, back or both")
-    if settings.imu not in {"front", "back", "chassis"}:
+    if settings.lio.imu not in {"front", "back", "chassis"}:
         raise ValueError("lio.imu must be front, back or chassis")
-    if settings.time_source != "header":
+    if settings.lio.time_source != "header":
         raise ValueError("standalone mapping requires header/source time")
-    if settings.grid_min_height > settings.grid_max_height:
+    if settings.grid.min_height > settings.grid.max_height:
         raise ValueError("grid min_height must not exceed max_height")
     if (
-        min(settings.grid_height_resolution, settings.grid_max_ray_range, settings.grid_max_rays)
+        min(settings.grid.height_resolution, settings.grid.max_ray_range, settings.grid.max_rays)
         <= 0
     ):
         raise ValueError("grid ray parameters must be positive")
-    if settings.grid_update_interval_s < 0:
+    if settings.grid.update_interval_s < 0:
         raise ValueError("grid update_interval_s must be nonnegative")
-    if settings.voxel_clearing and not settings.grid_ray_clearing:
+    if settings.grid.free_space_mode not in {"height_complete", "projected"}:
+        raise ValueError("grid.free_space_mode must be height_complete or projected")
+    count = settings.grid.projected_min_observations
+    if isinstance(count, bool) or not isinstance(count, Integral) or not 1 <= count <= 127:
+        raise ValueError("grid.projected_min_observations must be an integer in [1, 127]")
+    if settings.grid.projected_max_range <= 0:
+        raise ValueError("grid.projected_max_range must be positive")
+    if settings.grid.free_space_mode == "projected" and not settings.grid.ray_clearing:
+        raise ValueError("projected free space requires grid.ray_clearing")
+    if settings.online.voxel_clearing and not settings.grid.ray_clearing:
         raise ValueError("online.voxel_clearing requires grid.ray_clearing")
-    if settings.voxel_clear_observations < 2:
+    if settings.online.voxel_clear_observations < 2:
         raise ValueError("online.voxel_clear_observations must be at least 2")
-    if settings.body_filter_mode not in {"urdf", "box"}:
+    if settings.online.voxel_max_rays <= 0:
+        raise ValueError("online.voxel_max_rays must be positive")
+    if settings.body_filter.mode not in {"urdf", "box"}:
         raise ValueError("body_filter.mode 必须为 urdf 或 box")
-    if settings.body_collision_threshold < 0:
+    if settings.body_filter.collision_threshold < 0:
         raise ValueError("body collision_threshold 必须为有限非负数")
-    if settings.body_tf_timeout_s <= 0:
+    if settings.body_filter.tf_timeout_s <= 0:
         raise ValueError("body tf_timeout_s 必须为有限正数")
-    if settings.lidar_ready < 0:
+    if settings.lio.lidar_ready < 0:
         raise ValueError("--lidar-ready 不能小于 0")
     for name in (
         "max_imu_gap_s",
@@ -316,25 +197,25 @@ def validate_settings(settings: MappingSettings) -> None:
         "min_imu_samples",
         "max_match_failures",
     ):
-        if getattr(settings, name) <= 0:
+        if getattr(settings.lio, name) <= 0:
             raise ValueError(f"{name} 必须大于 0")
-    if settings.cube_side_length <= 0 or settings.det_range <= 0:
+    if settings.lio.cube_side_length <= 0 or settings.lio.det_range <= 0:
         raise ValueError("--cube-side-length / --det-range 必须大于 0")
-    if settings.filter_size_map < 0 or settings.filter_size_surf < 0:
+    if settings.lio.filter_size_map < 0 or settings.lio.filter_size_surf < 0:
         raise ValueError("filter-size 不能小于 0")
-    if settings.blind < 0:
+    if settings.lio.blind < 0:
         raise ValueError("--blind 不能小于 0")
-    if settings.grid_resolution <= 0:
+    if settings.grid.resolution <= 0:
         raise ValueError("--grid-resolution 必须大于 0")
-    if settings.grid_margin_cells < 0:
+    if settings.grid.margin_cells < 0:
         raise ValueError("--grid-margin-cells 不能小于 0")
-    if settings.keyframe_dist_th < 0 or settings.keyframe_angle_th < 0:
+    if settings.online.keyframe_dist_th < 0 or settings.online.keyframe_angle_th < 0:
         raise ValueError("keyframe 阈值不能小于 0")
-    if settings.voxel_resolution <= 0:
+    if settings.online.voxel_resolution <= 0:
         raise ValueError("--voxel-resolution 必须大于 0")
-    if settings.live_http_port < 0:
+    if settings.online.live_http_port < 0:
         raise ValueError("--live-http-port 不能小于 0")
     for prefix in ("front", "back"):
-        box = getattr(settings, f"{prefix}_box")
+        box = getattr(settings.body_filter, prefix)
         if box.min_x >= box.max_x or box.min_y >= box.max_y or box.min_z >= box.max_z:
             raise ValueError(f"{prefix} body box min 必须小于 max")

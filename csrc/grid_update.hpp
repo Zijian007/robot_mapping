@@ -9,7 +9,8 @@ using Footprint = std::optional<std::array<double, 2>>;
 
 struct GridRay {
   I row0, col0, row1, col1;
-  double z0, z1;
+  double z0, z1, length;
+  bool planar;
 };
 
 I grid_coordinate(double value) {
@@ -22,7 +23,13 @@ I grid_coordinate(double value) {
 void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, GridValues values,
                  double origin_x, double origin_y, double resolution, double min_height,
                  double max_height, double height_resolution, double max_range, I max_rays,
-                 double free_radius, Footprint previous, Footprint current) {
+                 double free_radius, Footprint previous, Footprint current,
+                 std::optional<Scores> projected_counts, I projected_min_observations,
+                 std::optional<double> projected_max_range) {
+  const double planar_range = projected_max_range.value_or(max_range);
+  if (!std::isfinite(planar_range) || planar_range <= 0 || projected_min_observations < 1 ||
+      projected_min_observations > 127)
+    throw std::invalid_argument("invalid projected free-space parameters");
   if (rays.ndim() != 2 || rays.shape(1) != 6 || distances.ndim() != 1 ||
       distances.shape(0) != rays.shape(0) || groups.ndim() != 2 || groups.shape(1) != 5 ||
       groups.shape(0) != rays.shape(0) || scores.ndim() != 3 || values.ndim() != 2 ||
@@ -38,6 +45,9 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
       max_rays < 1)
     throw std::invalid_argument("invalid grid update configuration");
   const I height = scores.shape(0), width = scores.shape(1), depth = scores.shape(2);
+  if (projected_counts && (projected_counts->ndim() != 2 || projected_counts->shape(0) != height ||
+                           projected_counts->shape(1) != width || !projected_counts->writeable()))
+    throw std::invalid_argument("invalid projected free-space buffer");
   if (width > std::numeric_limits<I>::max() / height / depth)
     throw std::invalid_argument("grid dimensions exceed supported range");
   auto r = rays.unchecked<2>();
@@ -45,6 +55,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
   auto g = groups.unchecked<2>();
   auto* score = scores.mutable_data();
   auto* value = values.mutable_data();
+  auto* planar_count = projected_counts ? projected_counts->mutable_data() : nullptr;
   py::gil_scoped_release release;
 
   // Complete validation and geometric preparation before touching evidence.
@@ -95,11 +106,15 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
     beams.push_back({grid_coordinate((r(i, 1) - origin_y) / resolution),
                      grid_coordinate((r(i, 0) - origin_x) / resolution),
                      grid_coordinate((y - origin_y) / resolution),
-                     grid_coordinate((x - origin_x) / resolution), r(i, 2), z});
+                     grid_coordinate((x - origin_x) / resolution), r(i, 2), z,
+                     std::min(d(i), max_range),
+                     r(i, 2) >= min_height && r(i, 2) <= max_height && r(i, 5) >= min_height &&
+                         r(i, 5) <= max_height});
   }
   const I columns = height * width, count = columns * depth;
   std::vector<std::uint64_t> seen(count / 64 + 1, 0), dirty_bits(columns / 64 + 1, 0);
   std::vector<I> dirty;
+  std::vector<std::uint64_t> planar_hits(planar_count ? columns / 64 + 1 : 0, 0);
   auto first = [](std::vector<std::uint64_t>& bits, I key) {
     const auto mask = std::uint64_t(1) << (key % 64);
     auto& word = bits[key / 64];
@@ -117,6 +132,10 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
     if (first(seen, key)) {
       score[key] = std::min<int>(score[key] + 2, 8);
       touch(key / depth);
+      if (planar_count) {
+        first(planar_hits, key / depth);
+        planar_count[key / depth] = 0;
+      }
     }
   for (const auto& beam : beams) {
     const I dr = beam.row1 - beam.row0, dc = beam.col1 - beam.col0;
@@ -136,6 +155,38 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
       }
     }
   }
+  if (planar_count) {
+    std::vector<std::uint64_t> planar_seen(columns / 64 + 1, 0);
+    // Cache all-height occlusion queries for the current observation only.
+    std::vector<std::uint8_t> blocked(columns, 0);
+    for (const auto& beam : beams) {
+      if (!beam.planar)
+        continue;
+      const I dr = beam.row1 - beam.row0, dc = beam.col1 - beam.col0;
+      const I steps = std::max(std::abs(dr), std::abs(dc));
+      for (I k = 1; k < steps; ++k) {
+        if ((double(k) / double(steps)) * beam.length >= planar_range)
+          break;
+        const I row = beam.row0 + floor_div(k * dr + steps / 2, steps);
+        const I col = beam.col0 + floor_div(k * dc + steps / 2, steps);
+        if (row < 0 || row >= height || col < 0 || col >= width)
+          continue;
+        const I column = row * width + col;
+        if (!blocked[column]) {
+          bool positive = (planar_hits[column / 64] >> (column % 64)) & 1;
+          for (I layer = 0; layer < depth && !positive; ++layer)
+            positive = score[column * depth + layer] > 0;
+          blocked[column] = positive ? 2 : 1;
+        }
+        if (blocked[column] == 2)
+          break;
+        if (first(planar_seen, column)) {
+          planar_count[column] = std::min<I>(planar_count[column] + 1, projected_min_observations);
+          touch(column);
+        }
+      }
+    }
+  }
   // Refresh the former prior's whole bounding patch, exactly as the reference.
   if (previous)
     for (I row = std::max<I>(0, prev[0] - radius); row < std::min(height, prev[0] + radius + 1);
@@ -144,11 +195,17 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
            ++col)
         touch(row * width + col);
   for (I column : dirty) {
-    bool occupied = false, free = true;
+    bool occupied = false, free = true, positive = false;
     for (I layer = 0; layer < depth; ++layer) {
       const int evidence = score[column * depth + layer];
       occupied = occupied || evidence >= 3;
       free = free && evidence < 0;
+      positive = positive || evidence > 0;
+    }
+    if (planar_count) {
+      if (positive)
+        planar_count[column] = 0;
+      free = !positive && planar_count[column] >= projected_min_observations;
     }
     value[column] = occupied ? 100 : (free ? 0 : -1);
   }
@@ -162,7 +219,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
         const I column = row * width + col;
         if (value[column] != -1)
           continue;
-        bool positive = false;
+        bool positive = planar_count && ((planar_hits[column / 64] >> (column % 64)) & 1);
         for (I layer = 0; layer < depth; ++layer)
           positive = positive || score[column * depth + layer] > 0;
         if (!positive)

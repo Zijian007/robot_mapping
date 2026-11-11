@@ -71,7 +71,8 @@ class NoApplication(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, NoApplication())
 import robot_mapping
 assert Path(robot_mapping.__file__).is_relative_to(target)
-from robot_mapping.core.online_map import OnlineMap, SE3Pose
+from robot_mapping.core.online_map import OnlineMap
+from robot_mapping.core.map_types import SE3Pose
 from robot_mapping.filters.body_filter import BodyBox
 from robot_mapping.filters.urdf_filter import UrdfBodyFilter
 from robot_mapping.types import LidarScan, ImuBatch
@@ -101,7 +102,7 @@ assert not ({'move_odom','wholebody','agibot_gdk','robot_mapping_gdk'} & set(sys
 if sys.argv[2] == '--native':
     from robot_mapping.backends.ray_native import kernels
     assert kernels is not None, 'native validation requires compiled ray kernels'
-    assert kernels.API_VERSION >= 5
+    assert kernels.API_VERSION >= 7
     assert mapping.voxels._native_store is not None
     assert main(['doctor','--native','--loop']) == 0
 print(json.dumps({'wheel_import': str(robot_mapping.__file__),

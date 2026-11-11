@@ -76,3 +76,34 @@ def test_zero_interval_keeps_keyframe_only_behavior():
     mapping.ingest_odom(observation(0.0))
     mapping.ingest_odom(observation(100.0))
     assert mapping.stats().grid_observations == 1
+
+
+def test_more_grid_rays_preserve_independent_voxel_clearing_across_reset():
+    params = dict(
+        ray_clearing=True,
+        voxel_clearing=True,
+        grid_update_interval_s=1.0,
+        min_height=0.4,
+        max_height=0.6,
+        free_radius_m=0,
+    )
+    baseline = OnlineMap(**params, max_rays=1)
+    improved = OnlineMap(**params, max_rays=128, voxel_max_rays=1)
+    for _ in range(2):
+        for mapping in (baseline, improved):
+            mapping.start_mapping()
+        for stamp in range(7):
+            obs = observation(float(stamp))
+            y = np.linspace(-1, 1, 80)
+            points = np.column_stack(
+                (np.full_like(y, 2 if stamp < 2 else 4), y, np.full_like(y, 0.5))
+            )
+            obs["scan_body_points"] = points
+            obs["scan_body_rays"] = np.column_stack((np.tile([0, 0, 0.5], (len(y), 1)), points))
+            baseline.ingest_odom(obs)
+            improved.ingest_odom(obs)
+            assert improved.voxels._cells == baseline.voxels._cells
+            assert improved.voxels._misses == baseline.voxels._misses
+        assert improved.stats().free_cells > baseline.stats().free_cells
+        assert improved.grid.max_rays == 128
+        assert improved.voxels.max_rays == 1

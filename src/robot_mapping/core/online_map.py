@@ -11,112 +11,26 @@ from __future__ import annotations
 import math
 import threading
 import time
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_mapping.ports import LioResult
 
-from .grid import OccupancyGridSpec
+from .map_projection import project_observation, replay_observation
+from .map_types import (
+    GridObservation,
+    KeyframeGate,
+    KeyframeRecord,
+    MappingPhase,
+    MapSnapshot,
+    OnlineMapStats,
+    pose_from_odom,
+)
 from .spatial import GrowingOccupancy2D, WorldVoxelHash
 
 if TYPE_CHECKING:
     from robot_mapping.backends.loop_types import LoopMatch, LoopSnapshot
-
-
-class MappingPhase(str, Enum):
-    IDLE = "idle"
-    MAPPING = "mapping"
-
-
-@dataclass(frozen=True)
-class SE3Pose:
-    position: tuple[float, float, float]
-    orientation_xyzw: tuple[float, float, float, float]
-
-    @property
-    def yaw(self) -> float:
-        x, y, z, w = self.orientation_xyzw
-        siny_cosp = 2.0 * (w * z + x * y)
-        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-        return math.atan2(siny_cosp, cosy_cosp)
-
-
-def pose_from_odom(odom: LioResult) -> SE3Pose:
-    pos = odom["position"]
-    quat = odom["orientation_xyzw"]
-    return SE3Pose(
-        position=(float(pos[0]), float(pos[1]), float(pos[2])),
-        orientation_xyzw=(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])),
-    )
-
-
-def yaw_delta(a: float, b: float) -> float:
-    d = (a - b + math.pi) % (2.0 * math.pi) - math.pi
-    return abs(d)
-
-
-class KeyframeGate:
-    def __init__(self, dist_th: float = 0.5, angle_th: float = 0.2) -> None:
-        self.dist_th = float(dist_th)
-        self.angle_th = float(angle_th)
-        self._last: SE3Pose | None = None
-
-    def reset(self) -> None:
-        self._last = None
-
-    def accept(self, pose: SE3Pose) -> bool:
-        if self._last is None:
-            self._last = pose
-            return True
-        dx = pose.position[0] - self._last.position[0]
-        dy = pose.position[1] - self._last.position[1]
-        dist = math.hypot(dx, dy)
-        if dist >= self.dist_th or yaw_delta(pose.yaw, self._last.yaw) >= self.angle_th:
-            self._last = pose
-            return True
-        return False
-
-
-@dataclass
-class OnlineMapStats:
-    keyframes: int = 0
-    voxels: int = 0
-    occupied_cells: int = 0
-    free_cells: int = 0
-    last_ingest_ms: float = 0.0
-    loops: int = 0
-    grid_observations: int = 0
-    removed_voxels: int = 0
-
-
-@dataclass(frozen=True)
-class KeyframeRecord:
-    lio_pose: SE3Pose
-    local_points: np.ndarray
-    local_rays: np.ndarray | None = None
-
-
-@dataclass(frozen=True)
-class GridObservation:
-    anchor_id: int
-    anchor_from_tracking: np.ndarray
-    local_rays: np.ndarray
-    keyframe: bool = False
-
-
-@dataclass(frozen=True)
-class MapSnapshot:
-    generation: int
-    version: int
-    points: np.ndarray
-    grid: tuple[np.ndarray, OccupancyGridSpec] | None
-    map_from_lio: np.ndarray
-    tracking_from_footprint: np.ndarray
-    grid_min_height: float
-    grid_max_height: float
 
 
 class OnlineMap:
@@ -143,9 +57,13 @@ class OnlineMap:
         height_resolution=0.2,
         max_ray_range=30.0,
         max_rays=2048,
+        free_space_mode="height_complete",
+        projected_min_observations=2,
+        projected_max_range=None,
         grid_update_interval_s=0.0,
         voxel_clearing=False,
         voxel_clear_observations=3,
+        voxel_max_rays=None,
         loop_config=None,
         pose_graph=None,
         loop_worker=None,
@@ -172,7 +90,8 @@ class OnlineMap:
             self._voxel_params.update(
                 clear_observations=voxel_clear_observations,
                 max_ray_range=max_ray_range,
-                max_rays=max_rays,
+                # None preserves the shared budget used by older callers/configs.
+                max_rays=max_rays if voxel_max_rays is None else voxel_max_rays,
             )
         self._grid_update_interval_s = float(grid_update_interval_s)
         if not math.isfinite(self._grid_update_interval_s) or self._grid_update_interval_s < 0:
@@ -182,7 +101,12 @@ class OnlineMap:
 
             self._grid_type = RayOccupancy2D
             self._grid_params.update(
-                height_resolution=height_resolution, max_ray_range=max_ray_range, max_rays=max_rays
+                height_resolution=height_resolution,
+                max_ray_range=max_ray_range,
+                max_rays=max_rays,
+                free_space_mode=free_space_mode,
+                projected_min_observations=projected_min_observations,
+                projected_max_range=projected_max_range,
             )
         else:
             self._grid_type = GrowingOccupancy2D
@@ -205,9 +129,9 @@ class OnlineMap:
         self._grid_observations = []
         self._last_grid_stamp = None
         self._last_input_stamp = None
-        self._opt_mats = []
+        self._optimized_poses = []
         self._loop_edges = []
-        self._last_lio_mat = None
+        self._last_keyframe_lio_pose = None
         self._map_from_lio = np.eye(4)
         self._tracking_from_footprint = np.eye(4)
         self._pose_graph = pose_graph
@@ -282,9 +206,9 @@ class OnlineMap:
         self._grid_observations = []
         self._last_grid_stamp = None
         self._last_input_stamp = None
-        self._opt_mats = []
+        self._optimized_poses = []
         self._loop_edges = []
-        self._last_lio_mat = None
+        self._last_keyframe_lio_pose = None
         self._map_from_lio = np.eye(4)
         self._tracking_from_footprint = np.eye(4)
 
@@ -298,8 +222,8 @@ class OnlineMap:
         """
         from .pose_math import is_se3
 
-        mat = np.asarray(map_from_lio, dtype=np.float64)
-        if not is_se3(mat):
+        map_from_tracking = np.asarray(map_from_lio, dtype=np.float64)
+        if not is_se3(map_from_tracking):
             raise ValueError("invalid map alignment")
         base = (
             np.eye(4)
@@ -322,7 +246,7 @@ class OnlineMap:
                 or (generation is not None and generation != self._generation)
             ):
                 return False
-            self._map_from_lio = mat.copy()
+            self._map_from_lio = map_from_tracking.copy()
             self._tracking_from_footprint = base.copy()
             self.grid.min_height, self.grid.max_height = map(float, bounds)
             return True
@@ -421,11 +345,14 @@ class OnlineMap:
         """Return one frozen observation with its current optimized map pose."""
         with self._lock:
             obs = self._grid_observations[idx]
-            return (self._opt_mats[obs.anchor_id] @ obs.anchor_from_tracking, obs.local_rays.copy())
+            return (
+                self._optimized_poses[obs.anchor_id] @ obs.anchor_from_tracking,
+                obs.local_rays.copy(),
+            )
 
     def keyframe_opt_matrix(self, idx):
         with self._lock:
-            return self._opt_mats[idx].copy()
+            return self._optimized_poses[idx].copy()
 
     def loop_snapshot(self) -> LoopSnapshot | None:
         from robot_mapping.backends.loop_types import LoopSnapshot
@@ -436,8 +363,8 @@ class OnlineMap:
             return LoopSnapshot(
                 self._generation,
                 self._pose_revision,
-                tuple(kf.local_points for kf in self._keyframes),
-                tuple(m.copy() for m in self._opt_mats),
+                tuple(keyframe.local_points for keyframe in self._keyframes),
+                tuple(pose_matrix.copy() for pose_matrix in self._optimized_poses),
             )
 
     def loop_snapshot_current(self, snapshot: LoopSnapshot) -> bool:
@@ -472,23 +399,25 @@ class OnlineMap:
         """Return whether a graph keyframe was added; timed grid updates return False."""
         from .pose_math import is_se3, relative_se3
 
-        t0 = time.perf_counter()
+        ingest_started_at = time.perf_counter()
         with self._lock:
             self._projection_timings = {"grid_ms": 0.0, "voxel_ms": 0.0}
-        lio_mat = self._lio_matrix(pose)
-        if not is_se3(lio_mat):
+        lio_from_tracking = self._lio_matrix(pose)
+        if not is_se3(lio_from_tracking):
             raise ValueError("non-finite or invalid keyframe pose")
         if stamp is not None and not math.isfinite(stamp):
             raise ValueError("observation stamp must be finite")
-        local = np.asarray(points, dtype=np.float64)
-        if local.size == 0:
+        keyframe_points = np.asarray(points, dtype=np.float64)
+        if keyframe_points.size == 0:
             return False
-        if local.ndim != 2 or local.shape[1] < 3:
+        if keyframe_points.ndim != 2 or keyframe_points.shape[1] < 3:
             raise ValueError("points must be (N, >=3)")
-        local = local[np.isfinite(local[:, :3]).all(axis=1), :3][:: self.map_point_stride].copy()
-        if len(local) == 0:
+        keyframe_points = keyframe_points[np.isfinite(keyframe_points[:, :3]).all(axis=1), :3][
+            :: self.map_point_stride
+        ].copy()
+        if len(keyframe_points) == 0:
             return False
-        local.flags.writeable = False
+        keyframe_points.flags.writeable = False
         local_rays = None
         if self._ray_clearing:
             if rays is None:
@@ -526,34 +455,44 @@ class OnlineMap:
             if local_rays is not None:
                 local_rays = local_rays.copy()
                 local_rays.flags.writeable = False
-            graph_mat = (
-                self._map_from_lio @ lio_mat
-                if not self._opt_mats
-                else (self._opt_mats[-1] @ relative_se3(self._last_lio_mat, lio_mat))
+            map_from_tracking = (
+                self._map_from_lio @ lio_from_tracking
+                if not self._optimized_poses
+                else (
+                    self._optimized_poses[-1]
+                    @ relative_se3(self._last_keyframe_lio_pose, lio_from_tracking)
+                )
             )
             if keyframe:
                 node_id = len(self._keyframes)
-                self._keyframes.append(KeyframeRecord(pose, local, local_rays))
-                self._opt_mats.append(graph_mat)
-                self._last_lio_mat = lio_mat
-            self._projection_timings = self._project(
+                self._keyframes.append(KeyframeRecord(pose, keyframe_points, local_rays))
+                self._optimized_poses.append(map_from_tracking)
+                self._last_keyframe_lio_pose = lio_from_tracking
+            self._projection_timings = project_observation(
                 self.voxels,
                 self.grid,
-                local if keyframe else None,
-                graph_mat,
+                keyframe_points if keyframe else None,
+                map_from_tracking,
                 self._tracking_from_footprint,
                 local_rays,
+                clear_voxels=self._voxel_clearing,
             )
             if self._ray_clearing:
-                relative = np.eye(4) if keyframe else relative_se3(self._last_lio_mat, lio_mat)
-                relative.flags.writeable = False
+                anchor_from_tracking = (
+                    np.eye(4)
+                    if keyframe
+                    else relative_se3(self._last_keyframe_lio_pose, lio_from_tracking)
+                )
+                anchor_from_tracking.flags.writeable = False
                 self._grid_observations.append(
-                    GridObservation(len(self._keyframes) - 1, relative, local_rays, keyframe)
+                    GridObservation(
+                        len(self._keyframes) - 1, anchor_from_tracking, local_rays, keyframe
+                    )
                 )
                 self._last_grid_stamp = stamp
             self._version += 1
             self._saved = False
-            self._last_ingest_ms = (time.perf_counter() - t0) * 1000.0
+            self._last_ingest_ms = (time.perf_counter() - ingest_started_at) * 1000.0
             current_generation = self._generation
         if keyframe and self._loop_worker is not None:
             self._loop_worker.submit(node_id, generation=current_generation)
@@ -567,65 +506,22 @@ class OnlineMap:
             pose, transform_points(invert_se3(self._lio_matrix(pose)), points)
         )
 
-    def _project(self, voxels, grid, local, mat, tracking_from_footprint, rays=None):
-        """Project one accepted observation, for both ingress and loop replay.
-
-        Only keyframes supply geometry. Transform measured rays once and share
-        them between the independent 2D and 3D evidence accumulators.
-        """
-        from .pose_math import transform_points
-
-        start = time.perf_counter()
-        if local is not None:
-            world = transform_points(mat, local)
-            voxels.add_points(world)
-        voxel_ms = (time.perf_counter() - start) * 1000.0
-        start = time.perf_counter()
-        # 2D evidence must retain original XY and Z. Projecting 15 cm voxel
-        # centers onto 5 cm cells creates a 3-cell lattice and shifts heights.
-        if rays is None:
-            grid.ingest_points(world, robot_xy=tuple((mat @ tracking_from_footprint)[:2, 3]))
-            grid_ms = (time.perf_counter() - start) * 1000.0
-        else:
-            world_rays = self._project_grid(grid, rays, mat, tracking_from_footprint)
-            grid_ms = (time.perf_counter() - start) * 1000.0
-            if self._voxel_clearing:
-                start = time.perf_counter()
-                voxels.ingest_rays(world_rays)
-                voxel_ms += (time.perf_counter() - start) * 1000.0
-        return {"grid_ms": grid_ms, "voxel_ms": voxel_ms}
-
-    def _replay_observation(self, voxels, grid, obs, frames, matrices, footprint):
-        mat = matrices[obs.anchor_id] @ obs.anchor_from_tracking
-        local = frames[obs.anchor_id].local_points if obs.keyframe else None
-        self._project(voxels, grid, local, mat, footprint, obs.local_rays)
-
-    @staticmethod
-    def _project_grid(grid, rays, mat, tracking_from_footprint):
-        from .pose_math import transform_points
-
-        world_rays = np.column_stack(
-            (transform_points(mat, rays[:, :3]), transform_points(mat, rays[:, 3:]))
-        )
-        grid.ingest_rays(world_rays, robot_xy=tuple((mat @ tracking_from_footprint)[:2, 3]))
-        return world_rays
-
     def accept_loop(self, match: LoopMatch) -> bool:
         from .pose_math import is_se3, relative_se3
 
         if self._pose_graph is None or not is_se3(match.T_match_query):
             return False
-        cfg = self.loop_config
+        loop_config = self.loop_config
         if not all(
             math.isfinite(v)
             for v in (match.fitness, match.rmse_m, match.correction_m, match.correction_rad)
         ):
             return False
         if (
-            not cfg.min_inlier_ratio <= match.fitness <= 1.0
-            or not 0 <= match.rmse_m <= cfg.max_rmse_m
-            or not 0 <= match.correction_m <= cfg.max_correction_m
-            or not 0 <= match.correction_rad <= cfg.max_correction_rad
+            not loop_config.min_inlier_ratio <= match.fitness <= 1.0
+            or not 0 <= match.rmse_m <= loop_config.max_rmse_m
+            or not 0 <= match.correction_m <= loop_config.max_correction_m
+            or not 0 <= match.correction_rad <= loop_config.max_correction_rad
         ):
             return False
         # _backend_lock serializes solver mutation; _lock protects the published map.
@@ -638,18 +534,18 @@ class OnlineMap:
                     or match.pose_revision != self._pose_revision
                 ):
                     return False
-                n = len(self._keyframes)
-                if not 0 <= match.match_id < match.query_id < n:
+                keyframe_count = len(self._keyframes)
+                if not 0 <= match.match_id < match.query_id < keyframe_count:
                     return False
                 if any(
-                    (e.match_id, e.query_id) == (match.match_id, match.query_id)
-                    for e in self._loop_edges
+                    (loop_edge.match_id, loop_edge.query_id) == (match.match_id, match.query_id)
+                    for loop_edge in self._loop_edges
                 ):
                     return False
-                frames = list(self._keyframes)
-                observations = list(self._grid_observations)
-                initial = [m.copy() for m in self._opt_mats]
-                edges = list(self._loop_edges)
+                keyframes = list(self._keyframes)
+                grid_observations = list(self._grid_observations)
+                initial_poses = [pose_matrix.copy() for pose_matrix in self._optimized_poses]
+                loop_edges = list(self._loop_edges)
                 generation = self._generation
                 tracking_from_footprint = self._tracking_from_footprint.copy()
                 grid_params = dict(
@@ -662,39 +558,56 @@ class OnlineMap:
             try:
                 if self._backend_generation != generation:
                     graph.reset()
-                for k in range(graph.size, n):
-                    if k % 16 == 0 and not self._loop_match_current(match):
+                for keyframe_index in range(graph.size, keyframe_count):
+                    if keyframe_index % 16 == 0 and not self._loop_match_current(match):
                         self._backend_generation = None
                         return False
-                    rel = (
+                    previous_from_current = (
                         None
-                        if k == 0
+                        if keyframe_index == 0
                         else relative_se3(
-                            self._lio_matrix(frames[k - 1].lio_pose),
-                            self._lio_matrix(frames[k].lio_pose),
+                            self._lio_matrix(keyframes[keyframe_index - 1].lio_pose),
+                            self._lio_matrix(keyframes[keyframe_index].lio_pose),
                         )
                     )
-                    graph.add_keyframe(initial[k], relative_to_prev=rel)
+                    graph.add_keyframe(
+                        initial_poses[keyframe_index], relative_to_prev=previous_from_current
+                    )
                 if self._backend_generation != generation:
-                    for edge in edges:
+                    for edge in loop_edges:
                         graph.add_loop(edge.match_id, edge.query_id, edge.T_match_query)
                 self._backend_generation = generation
                 graph.add_loop(match.match_id, match.query_id, match.T_match_query)
-                matrices = graph.optimized_matrices()
+                optimized_poses = graph.optimized_matrices()
                 voxels = self._voxel_type(**self._voxel_params)
                 grid = self._grid_type(**grid_params)
-                for index, (kf, mat) in enumerate(zip(frames, matrices)):
+                for index, (keyframe, map_from_tracking) in enumerate(
+                    zip(keyframes, optimized_poses)
+                ):
                     if index % 16 == 0 and not self._loop_match_current(match):
                         self._backend_generation = None
                         return False
                     if not self._ray_clearing:
-                        self._project(voxels, grid, kf.local_points, mat, tracking_from_footprint)
-                for index, obs in enumerate(observations):
+                        project_observation(
+                            voxels,
+                            grid,
+                            keyframe.local_points,
+                            map_from_tracking,
+                            tracking_from_footprint,
+                            clear_voxels=self._voxel_clearing,
+                        )
+                for index, obs in enumerate(grid_observations):
                     if index % 16 == 0 and not self._loop_match_current(match):
                         self._backend_generation = None
                         return False
-                    self._replay_observation(
-                        voxels, grid, obs, frames, matrices, tracking_from_footprint
+                    replay_observation(
+                        voxels,
+                        grid,
+                        obs,
+                        keyframes,
+                        optimized_poses,
+                        tracking_from_footprint,
+                        clear_voxels=self._voxel_clearing,
                     )
                 # 3. Catch up new observations, then publish in one locked swap.
                 # A generation/pose change aborts this transaction; ingress keeps
@@ -708,31 +621,43 @@ class OnlineMap:
                         ):
                             self._backend_generation = None
                             return False
-                        tail = self._keyframes[len(frames) :]
-                        grid_tail = self._grid_observations[len(observations) :]
-                        if not tail and not grid_tail:
+                        pending_keyframes = self._keyframes[len(keyframes) :]
+                        pending_observations = self._grid_observations[len(grid_observations) :]
+                        if not pending_keyframes and not pending_observations:
                             self.voxels, self.grid = voxels, grid
-                            self._opt_mats = matrices
+                            self._optimized_poses = optimized_poses
                             self._loop_edges.append(match)
                             self._pose_revision += 1
                             self._version += 1
                             self._saved = False
                             return True
-                    for kf in tail:
-                        mat = matrices[-1] @ relative_se3(
-                            self._lio_matrix(frames[-1].lio_pose), self._lio_matrix(kf.lio_pose)
+                    for keyframe in pending_keyframes:
+                        map_from_tracking = optimized_poses[-1] @ relative_se3(
+                            self._lio_matrix(keyframes[-1].lio_pose),
+                            self._lio_matrix(keyframe.lio_pose),
                         )
-                        frames.append(kf)
-                        matrices.append(mat)
+                        keyframes.append(keyframe)
+                        optimized_poses.append(map_from_tracking)
                         if not self._ray_clearing:
-                            self._project(
-                                voxels, grid, kf.local_points, mat, tracking_from_footprint
+                            project_observation(
+                                voxels,
+                                grid,
+                                keyframe.local_points,
+                                map_from_tracking,
+                                tracking_from_footprint,
+                                clear_voxels=self._voxel_clearing,
                             )
-                    for obs in grid_tail:
-                        self._replay_observation(
-                            voxels, grid, obs, frames, matrices, tracking_from_footprint
+                    for obs in pending_observations:
+                        replay_observation(
+                            voxels,
+                            grid,
+                            obs,
+                            keyframes,
+                            optimized_poses,
+                            tracking_from_footprint,
+                            clear_voxels=self._voxel_clearing,
                         )
-                        observations.append(obs)
+                        grid_observations.append(obs)
             except BaseException:
                 self._backend_generation = None
                 raise

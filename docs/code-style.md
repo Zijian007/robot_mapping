@@ -18,9 +18,8 @@ python scripts/check_quality.py --fix  # 格式化并应用安全 lint 修复
 PYTHON=python bash scripts/run_tests.sh
 ```
 
-本机已有 Ruff 的解释器是 /home/agi/.venv/bin/python。
-robot_mapping 的依赖测试使用 /home/agi/robot_mapping/.venv/bin/python。
-检查工具和算法测试可以使用不同的解释器。
+使用已安装本包 dev extra 的独立开发环境，创建方式见 [开发指南](development.md)。
+检查工具和算法测试可以使用不同的解释器，无需 GDK 应用的运行环境。
 
 通过 CLANG_FORMAT 指定 clang-format-14 的路径。检查脚本拒绝不同主版本，
 避免不同机器反复改写格式；三个仓库升级工具版本时需同步配置。
@@ -72,12 +71,12 @@ C++ 类型或数组视图。这是后续结构重构的目标；现有代码尚�
 排版修改、接口调整和算法行为变化分别组织，便于审查和定位回归。
 
 1. 运行 check_quality.py。
-2. 运行当前包的现有测试。
-3. 修改 C++ 后，使用相应依赖环境执行 python setup.py build_ext --inplace，
+2. 按改动影响范围运行当前包的现有测试。
+3. 修改 C++ 后，使用相应依赖环境重新执行 `python -m pip install -e '.[dev]'`，
    再运行包含原生路径的测试，确认没有因缺扩展而跳过。
-4. 修改公共接口时验证消费者：fastlio2/grid_icp 对应 move_odom，
-   robot_mapping 对应 robot_mapping_gdk；接口或算法行为变化还需要固定数据回放比较。
+4. 修改公共接口时验证实际调用方，例如 move_odom 或 robot_mapping_gdk；
+   需要评估算法效果时，再使用固定数据回放比较。
 
 算法库测试不连接机器人、不发送运动命令。
-源码检查和测试通过不等于部署完成；robot_mapping 的在线环境使用安装的 wheel，
-修改源码和原地编译不会自动更新其已安装 wheel 或锁定 wheelhouse。
+源码检查和测试通过不等于调用方环境已更新。可编辑安装读取源码；使用已安装 wheel 的
+应用需更新对应 wheel。应用自行维护锁定 wheelhouse 时，也需同步更新依赖清单。

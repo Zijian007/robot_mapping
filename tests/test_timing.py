@@ -21,7 +21,8 @@ def test_timing_window_drops_old_spikes_and_copies_samples():
 def test_projection_timing_does_not_reuse_previous_observation():
     import numpy as np
 
-    from robot_mapping.core.online_map import OnlineMap, SE3Pose
+    from robot_mapping.core.map_types import SE3Pose
+    from robot_mapping.core.online_map import OnlineMap
 
     mapping = OnlineMap()
     pose = SE3Pose((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))

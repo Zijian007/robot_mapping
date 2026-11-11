@@ -13,13 +13,13 @@ def calibration(profile, settings):
         name: np.asarray(value, dtype=np.float64)
         for name, value in robot.get("lidar_to_base", {}).items()
     }
-    required = {"front", "back"} if settings.needs_back else {settings.primary_lidar}
+    required = {"front", "back"} if settings.lio.needs_back else {settings.lio.primary_lidar}
     if not required <= matrices.keys():
         raise ValueError(f"robot.lidar_to_base requires {sorted(required)}")
     imu = np.asarray(robot.get("imu_from_lidar"), dtype=np.float64)
     if not all(is_se3(v) for v in (*matrices.values(), imu)):
         raise ValueError("robot calibration must contain finite rigid 4x4 transforms")
-    if settings.imu != settings.primary_lidar and not robot.get(
+    if settings.lio.imu != settings.lio.primary_lidar and not robot.get(
         "cross_sensor_imu_calibrated", False
     ):
         raise ValueError(

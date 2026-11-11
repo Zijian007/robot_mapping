@@ -200,7 +200,13 @@ def test_native_store_serializes_concurrent_insertion_and_snapshots():
 
 
 @pytest.mark.parametrize("max_rays", [1, 2, 19, 64])
-def test_fused_grid_matches_reference_with_limits_growth_and_footprints(monkeypatch, max_rays):
+@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected"])
+@pytest.mark.parametrize(
+    "projection_params", [{}, {"projected_min_observations": 4, "projected_max_range": 1.25}]
+)
+def test_fused_grid_matches_reference_with_limits_growth_and_footprints(
+    monkeypatch, max_rays, free_space_mode, projection_params
+):
     rng = np.random.default_rng(206)
     pair = [
         ray_grid.RayOccupancy2D(
@@ -210,6 +216,8 @@ def test_fused_grid_matches_reference_with_limits_growth_and_footprints(monkeypa
             height_resolution=0.2,
             max_rays=max_rays,
             max_ray_range=3.0,
+            free_space_mode=free_space_mode,
+            **projection_params,
         )
         for _ in range(2)
     ]
@@ -243,6 +251,8 @@ def test_fused_grid_matches_reference_with_limits_growth_and_footprints(monkeypa
         assert pair[0]._last_footprint_xy == pair[1]._last_footprint_xy
         np.testing.assert_array_equal(pair[0]._scores, pair[1]._scores)
         np.testing.assert_array_equal(pair[0].values, pair[1].values)
+        if free_space_mode == "projected":
+            np.testing.assert_array_equal(pair[0]._projected_counts, pair[1]._projected_counts)
 
 
 def test_fused_grid_validates_in_place_buffers_before_mutation():
@@ -250,10 +260,17 @@ def test_fused_grid_validates_in_place_buffers_before_mutation():
     grid._ensure_seed(0.0, 0.0)
     rays = np.array([[0.0, 0.0, 0.5, 2.0, 0.0, 0.5]])
     distances = np.array([2.0])
-    groups = grid._native_groups(rays)
+    groups = grid._ray_groups(rays)
     scores, values = grid._scores, grid.values
 
-    def apply(scores=scores, values=values, rays=rays, distances=distances, groups=groups):
+    def apply(
+        scores=scores,
+        values=values,
+        rays=rays,
+        distances=distances,
+        groups=groups,
+        projected_counts=None,
+    ):
         kernels.grid_update(
             rays,
             distances,
@@ -271,6 +288,7 @@ def test_fused_grid_validates_in_place_buffers_before_mutation():
             grid.free_radius_m,
             None,
             None,
+            projected_counts,
         )
 
     before = scores.copy(), values.copy()
@@ -286,6 +304,14 @@ def test_fused_grid_validates_in_place_buffers_before_mutation():
         apply(scores=scores.astype(np.float64))
     with pytest.raises((TypeError, ValueError)):
         apply(values=values[:, ::-1])
+    with pytest.raises((TypeError, ValueError)):
+        apply(projected_counts=np.zeros(values.shape, dtype=np.float64))
+    with pytest.raises(ValueError):
+        apply(projected_counts=np.zeros((1, 1), dtype=np.int8))
+    readonly = np.zeros(values.shape, dtype=np.int8)
+    readonly.flags.writeable = False
+    with pytest.raises(ValueError):
+        apply(projected_counts=readonly)
     scores.flags.writeable = False
     with pytest.raises(ValueError):
         apply()

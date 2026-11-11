@@ -2,7 +2,6 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-
 from robot_mapping.backends import capabilities
 
 
@@ -19,7 +18,6 @@ def test_fastlio_ray_requirement_is_checked_only_when_requested(monkeypatch):
 
 
 def test_incomplete_vgicp_binding_reports_unavailable(monkeypatch):
-    monkeypatch.setattr(capabilities, "_require_numpy1", lambda: None)
     monkeypatch.setitem(sys.modules, "pygicp", SimpleNamespace(mapping_gil_released=True))
     assert capabilities.pygicp_available() is False
     with pytest.raises(RuntimeError, match="convergence/GIL"):

@@ -5,7 +5,5 @@ try:
 except ImportError:
     kernels = None
 else:
-    # An older in-place extension must not leave new Python code using a
-    # partially compatible backend. Managed runtime verification rejects fallback.
-    if getattr(kernels, "API_VERSION", 0) < 5:
-        kernels = None
+    if getattr(kernels, "API_VERSION", 0) < 7:
+        raise RuntimeError("robot_mapping._ray_native requires API >= 7; rebuild robot-mapping")

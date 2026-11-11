@@ -1,69 +1,91 @@
-# 开发、发布和目录维护
+# 算法开发与构建
 
-Python/C++ 的统一格式、工具版本和检查入口见 [算法包代码规范](code-style.md)。
+`robot_mapping` 是独立的算法包，依赖和构建入口由 `pyproject.toml` 声明。
+安装、开发、构建和算法测试均不要求 `robot_mapping_gdk`、`robot_hal` 或设备 SDK。
 
-## 修改与验证
+## 独立安装
 
-在线入口运行 `.venv` 中安装的 wheel。修改 `src/` 或 `csrc/` 后，源码测试与已安装程序
-是两套验证对象；仅修改源码不会自动更新在线程序。
-
-从 `robot_mapping/` 执行两个包的源码测试：
+使用已有 Python 3.10+ 环境，或在仓库外创建开发环境。从算法仓库根目录执行：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  PYTHONPATH=src:../robot_mapping_gdk/src \
-  .venv/bin/python -m pytest -q --import-mode=importlib -p no:cacheprovider \
-  tests ../robot_mapping_gdk/tests
+python3 -m venv ~/.venvs/robot-dev
+source ~/.venvs/robot-dev/bin/activate
+python -m pip install .
+python -m robot_mapping doctor
 ```
 
-射线扩展在源码树中不存在时，Python 参考实现仍可运行，原生专用测试会跳过。
-FAST-LIO2 自身的 SDK 适配测试另需其开发环境中的传感器消息和 Protobuf 依赖，
-不属于这两个包的基本测试依赖；原生运行检查使用 `verify_runtime.py`。
-需要验证源码中的 C++ 修改时先构建扩展：
+虚拟环境由开发者或调用方选择，不是算法包的一部分，也不绑定到任何应用目录。
+基础安装仅依赖 NumPy；`.[runtime]` 增加 YAML 支持。
+
+使用默认 LIO 时，另行安装符合本包接口要求的 [FAST-LIO2](../../fastlio2/README.md)，
+或通过 `LioBackend` 注入其他实现。启用回环时安装 `.[loop]` 和带收敛状态、GIL 补丁的
+FastVGICP。回环使用支持 NumPy 2 的 `gtsam==4.2.2+numpy2.1` 构建，
+从本地构建或相应 wheelhouse 安装；无需降级 NumPy。
+这些依赖均为算法后端，不需要通过 GDK 应用安装。
 
 ```bash
-.venv/bin/python setup.py build_ext --inplace
+# 仅检查已选用的后端，不连接硬件
+python -m robot_mapping doctor --native
+python -m robot_mapping doctor --loop
 ```
 
-当前 ARM64 / CPython 3.10 环境的打包和独立安装验证：
+## 源码开发
+
+在独立开发环境中安装可编辑源码和开发工具：
 
 ```bash
-.venv/bin/python -m pip wheel --no-index --no-deps --no-build-isolation \
-  --wheel-dir dist . ../robot_mapping_gdk
-OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/verify_wheel.py \
-  dist/robot_mapping-0.4.0-cp310-cp310-linux_aarch64.whl --native
-OPENBLAS_NUM_THREADS=1 .venv/bin/python ../robot_mapping_gdk/scripts/verify_wheels.py \
-  dist/robot_mapping-0.4.0-cp310-cp310-linux_aarch64.whl \
-  dist/robot_mapping_gdk-0.2.0-py3-none-any.whl
+python -m pip install -e '.[dev]'
+PYTHON=python bash scripts/run_tests.sh
 ```
 
-其他 Python 版本或架构使用实际生成的 wheel 文件名。`verify_wheels.py` 检查核心与适配包
-隔离、配置生成、录包、回放和保存，不连接设备。验证通过后，按照
-[运行环境说明](runtime.md#重新构建和导出) 生成并验证新的锁定 wheelhouse，再安装到运行环境。
-不要只替换 wheelhouse 中的 wheel 而保留旧的校验清单。
+`run_tests.sh` 从本仓库读取源码，使用 `PYTHON` 指定的解释器，不安装依赖。
+需要 YAML 时改用 `python -m pip install -e '.[dev,runtime]'`。
+没有可选后端时，相应原生测试会跳过；验证相关改动时应安装对应后端。
+格式及类型约定见 [代码规范](code-style.md)，按改动影响范围选择必要检查。
+修改公共接口时，再检查实际调用方；GDK 应用的集成验证属于应用侧工作。
 
-## 文件分类与清理
+## 构建 wheel
 
-| 内容 | 维护规则 |
+```bash
+python -m pip wheel --no-deps --wheel-dir dist .
+```
+
+wheel 可独立分发，在匹配 Python ABI 和平台的调用方环境中安装。
+普通安装、可编辑安装、wheel 安装、uv 环境替代命令和卸载统一见 [README](../README.md#安装)。
+默认构建隔离会安装 `pyproject.toml` 声明的构建依赖。
+离线构建需提前提供 setuptools、wheel、pybind11 和所需依赖，使用
+`--no-index --no-build-isolation`，或通过 `--find-links` 指定离线依赖目录。
+
+射线扩展需要 C++17 编译器和 pybind11，安装已编译 wheel 无需编译工具。
+开发中验证 C++ 改动时可原地构建：
+
+```bash
+python -m pip install 'setuptools>=68' wheel 'pybind11>=2.11'
+python setup.py build_ext --inplace
+```
+
+没有扩展时仍可使用 Python/NumPy 参考实现，原生专用测试会跳过。
+本包 wheel 不包含 FAST-LIO2、FastVGICP 或 GTSAM，使用方按需安装。
+
+## 应用集成
+
+任意 Python 应用都可以安装本包并实现采集端口。依赖方向为
+`应用 → robot_mapping → 所选算法后端`，算法包不反向依赖应用。
+
+`robot_mapping_gdk` 是面向 G2 的源码应用，负责采集、会话和设备部署，
+该应用统一使用 `/home/agi/.venv`，离线 wheelhouse 和安装脚本用于补齐共享环境的依赖，详见
+[应用运行环境](../../robot_mapping_gdk/docs/runtime.md)。算法包仍可安装到任意调用方环境。
+应用使用安装的 wheel 时，算法源码修改后需重新构建并更新应用内的依赖。
+
+## 目录维护
+
+| 路径 | 内容 |
 |---|---|
-| `src/`、`csrc/`、`tests/`、`scripts/` | 源码与可维护工具，纳入 Git |
-| `docs/` | 当前操作和设计说明；日期性结论移入 `docs/history/<日期>/` |
-| `docs/baseline-map-fixtures.json` | 回归测试输入，不能当日志删除 |
-| `.venv/` | 当前运行环境；清理构建目录时保留 |
-| `wheelhouse/` | 锁定离线安装包；单独备份并保留 manifest 和 lock |
-| `build/`、`dist/`、缓存、`*.egg-info` | 可再生成产物；清理前核对是否混入实验输入或回退备份 |
-| `artifacts/baselines/` | 已选择的本机评估基准，有维护价值；按实际需要备份 |
-| `artifacts/history/` | 一次性脚本、统计、日志和旧 wheel 备份；不是运行依赖 |
-| `artifacts/logs/` | 本机诊断日志，不纳入 Git |
+| `src/`、`csrc/` | Python 算法和 C++ 扩展 |
+| `tests/`、`tests/fixtures/` | 功能测试及合成场景固定数据 |
+| `scripts/` | 算法构建、检查及按需性能诊断工具 |
+| `docs/` | 当前算法、参数和接口说明 |
+| `build/`、`dist/`、`*.egg-info` | 构建时生成，使用后可清理 |
 
-GDK 仓库的 `maps/` 和 `recordings/` 是用户数据，不属于构建缓存。
-新评估输出放在 GDK 的 `artifacts/evaluations/<实验名>/`，避免再次散落到项目根目录。
-本机 `g2_mapping.json` 也不纳入 Git；机器人默认模板维护在适配包的 `resources/` 中。
-
-## 无用代码审查
-
-先查实际导入、调用、命令行入口和测试，再决定删除。Python 回退实现用于没有扩展的环境及
-原生等价性验证；`spatial.py` 是射线实现的共享基础；`projection.py` 被适配包的导出工具使用。
-这些都不是历史副本。未被内部调用的公开接口也需要检查外部消费者，不能仅凭文本出现次数删除。
-
-本次整理记录见 [2026-11-08 归档](history/20261108/README.md)。
+Python 参考实现、共享空间索引及投影模块都有实际用途，不能仅凭内部引用次数删除。
+实验报告、备份和历史流水账不作为项目交付物保存。

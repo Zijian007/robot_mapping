@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from robot_mapping.core.online_map import OnlineMap, SE3Pose
+from robot_mapping.core.map_types import SE3Pose
+from robot_mapping.core.online_map import OnlineMap
 from robot_mapping.core.pose_math import gravity_aligned_frame
 
 

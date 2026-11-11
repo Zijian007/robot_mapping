@@ -20,7 +20,8 @@ class BlockApplications(importlib.abc.MetaPathFinder):
             raise AssertionError('unexpected import: '+fullname)
 sys.meta_path.insert(0, BlockApplications())
 before_path = list(sys.path)
-from robot_mapping.core.online_map import OnlineMap, SE3Pose
+from robot_mapping.core.online_map import OnlineMap
+from robot_mapping.core.map_types import SE3Pose
 from robot_mapping.filters.body_filter import BodyBox
 from robot_mapping.filters.urdf_filter import UrdfBodyFilter
 from robot_mapping.ports import SensorSource, TransformProvider

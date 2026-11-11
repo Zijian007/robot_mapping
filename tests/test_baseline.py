@@ -1,4 +1,4 @@
-"""Reproduce exact no-loop maps captured before extracting the package."""
+"""Deterministic map geometry and grid encoding for synthetic scenes."""
 
 import hashlib
 import json
@@ -8,14 +8,15 @@ import numpy as np
 import pytest
 
 from robot_mapping.core import spatial
-from robot_mapping.core.online_map import OnlineMap, SE3Pose
+from robot_mapping.core.map_types import SE3Pose
+from robot_mapping.core.online_map import OnlineMap
 from robot_mapping.core.pose_math import gravity_aligned_frame
 
 
 @pytest.mark.parametrize("tilted", [False, True])
-def test_map_matches_original_algorithm_and_encoding(tilted, monkeypatch):
+def test_map_matches_fixed_geometry_and_encoding(tilted, monkeypatch):
     fixture = json.loads(
-        (Path(__file__).parents[1] / "docs/baseline-map-fixtures.json").read_text()
+        (Path(__file__).parent / "fixtures/map_snapshot.json").read_text()
     )
     expected = fixture["tilted" if tilted else "level"]
     mapping = OnlineMap(voxel_resolution=0.15, grid_resolution=0.05, keyframe_dist_th=0.1)
@@ -36,8 +37,8 @@ def test_map_matches_original_algorithm_and_encoding(tilted, monkeypatch):
     assert mapping.keyframe_count() == expected["keyframes"]
     assert vars(spec) == expected["grid_spec"]
     assert hashlib.sha256(grid.astype("<i2").tobytes()).hexdigest() == expected["grid_sha256"]
-    # Keep checking the original fixture byte-for-byte with its Python set
-    # ordering, then check native geometry bit-for-bit independent of hash order.
+    # Check fixed grid/point encoding, then compare native geometry
+    # independent of hash iteration order.
     reference_points = reference.voxels.points_array()
     assert (
         hashlib.sha256(reference_points.astype("<f8").tobytes()).hexdigest()

@@ -8,7 +8,7 @@ import pytest
 from robot_mapping.backends import fastlio
 from robot_mapping.backends.ray_native import kernels
 from robot_mapping.filters.body_filter import BodyBox
-from robot_mapping.runtime import frontend
+from robot_mapping.runtime import scan_preprocessing
 from robot_mapping.types import LidarScan
 
 pytestmark = pytest.mark.skipif(kernels is None, reason="optional native extension not built")
@@ -129,9 +129,9 @@ def test_fused_merge_matches_reference_bytes_and_accounting(monkeypatch, columns
     outputs = []
     for backend in (None, kernels):
         with monkeypatch.context() as context:
-            context.setattr(frontend, "kernels", backend)
+            context.setattr(scan_preprocessing, "kernels", backend)
             outputs.append(
-                frontend.merge_back_into_front(
+                scan_preprocessing.merge_back_into_front(
                     front,
                     back,
                     rotation_front=rotation,

@@ -98,11 +98,11 @@ class Lio:
 
 
 def test_core_frontend_filters_dual_dtos_at_source_times(tmp_path):
+    base_settings = load_settings(config_file(tmp_path))
     settings = replace(
-        load_settings(config_file(tmp_path)),
-        lidar="both",
-        body_filter_enabled=True,
-        body_filter_mode="urdf",
+        base_settings,
+        lio=replace(base_settings.lio, lidar="both"),
+        body_filter=replace(base_settings.body_filter, enabled=True, mode="urdf"),
     )
     source = Frames(1)
     original = source.next_lidar
@@ -145,7 +145,8 @@ def test_core_frontend_filters_dual_dtos_at_source_times(tmp_path):
 def test_invalid_settings_raise_value_error(tmp_path):
     from robot_mapping.config import validate_settings
 
-    settings = replace(load_settings(config_file(tmp_path)), grid_resolution=0.0)
+    base_settings = load_settings(config_file(tmp_path))
+    settings = replace(base_settings, grid=replace(base_settings.grid, resolution=0.0))
     with pytest.raises(ValueError, match="grid-resolution"):
         validate_settings(settings)
 
@@ -181,7 +182,8 @@ def test_map_refuses_invalid_or_unreported_lidar_update(validity):
 def test_tracking_guard_settings_must_be_positive(tmp_path, field):
     from robot_mapping.config import validate_settings
 
-    settings = replace(load_settings(config_file(tmp_path)), **{field: 0})
+    base_settings = load_settings(config_file(tmp_path))
+    settings = replace(base_settings, lio=replace(base_settings.lio, **{field: 0}))
     with pytest.raises(ValueError, match=field):
         validate_settings(settings)
 
@@ -227,7 +229,7 @@ def test_frontend_delegates_frame_choice_and_defaults_to_backend_coordinates(
 
 def test_dual_lidar_merge_transforms_ray_origins_with_endpoints():
     from robot_mapping.backends.fastlio import BackendScan
-    from robot_mapping.runtime.frontend import merge_back_into_front
+    from robot_mapping.runtime.scan_preprocessing import merge_back_into_front
 
     front = BackendScan(np.array([[2, 0, 0.5, 1, 20, 0, 0, 0]], dtype=np.float32), 10.0, 0.1, 1, 0)
     back = replace(front, points_array=front.points_array.copy())

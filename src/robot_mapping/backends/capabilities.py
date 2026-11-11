@@ -5,17 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from types import ModuleType
 
-import numpy as np
-
-
-def _require_numpy1() -> None:
-    # These native wheels were built against NumPy 1.26.4; NumPy 2 can crash Python.
-    if np.__version__ != "1.26.4":
-        raise RuntimeError("GTSAM/VGICP require this deployment's NumPy 1.26.4 runtime")
-
 
 def load_gtsam() -> ModuleType:
-    _require_numpy1()
     import gtsam
 
     if not hasattr(gtsam, "Pose3") or not hasattr(gtsam, "ISAM2"):
@@ -24,7 +15,6 @@ def load_gtsam() -> ModuleType:
 
 
 def load_pygicp() -> ModuleType:
-    _require_numpy1()
     import pygicp
 
     if not getattr(pygicp, "mapping_gil_released", False) or not hasattr(

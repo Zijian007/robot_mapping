@@ -8,61 +8,27 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
-import inspect
 import json
-import sys
 import time
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
 
-def load_module(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+def configure(backend):
+    from robot_mapping.backends import fastlio
+    from robot_mapping.filters import body_filter, urdf_filter
+    from robot_mapping.runtime import frontend, scan_preprocessing
 
-
-def configure(args):
-    if args.backend == "legacy":
-        if args.legacy_root is None:
-            raise ValueError("legacy backend requires --legacy-root")
-        import robot_mapping
-
-        (extension,) = args.legacy_root.glob("_ray_native*.so")
-        native = load_module("robot_mapping._ray_native", extension)
-        robot_mapping._ray_native = native
-        from robot_mapping.backends import ray_native
-
-        ray_native.kernels = native
-        modules = [
-            load_module(name, args.legacy_root / file)
-            for name, file in (
-                ("robot_mapping.filters.body_filter", "body_filter.py"),
-                ("robot_mapping.filters.urdf_filter", "urdf_filter.py"),
-                ("robot_mapping.backends.fastlio", "fastlio.py"),
-                ("robot_mapping.runtime.frontend", "frontend.py"),
-            )
-        ]
+    if backend == "python":
+        for module in (body_filter, urdf_filter, fastlio, scan_preprocessing):
+            module.kernels = None
     else:
-        from robot_mapping.backends import fastlio
-        from robot_mapping.filters import body_filter, urdf_filter
-        from robot_mapping.runtime import frontend
+        from robot_mapping.backends.ray_native import kernels
 
-        modules = [body_filter, urdf_filter, fastlio, frontend]
-        if args.backend == "python":
-            for module in modules:
-                module.kernels = None
-        else:
-            from robot_mapping.backends.ray_native import kernels
-
-            if kernels is None:
-                raise RuntimeError("build the native extension before benchmarking")
-    return modules[1:]
+        if kernels is None:
+            raise RuntimeError("build the native extension before benchmarking")
+    return urdf_filter, fastlio, frontend, scan_preprocessing
 
 
 def summary(values):
@@ -71,8 +37,7 @@ def summary(values):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", choices=("legacy", "native", "python"), required=True)
-    parser.add_argument("--legacy-root", type=Path)
+    parser.add_argument("--backend", choices=("native", "python"), required=True)
     parser.add_argument("--recording", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=64)
@@ -80,8 +45,8 @@ def main():
     args = parser.parse_args()
     if min(args.frames, args.repeats) < 1:
         parser.error("frames and repeats must be positive")
-    urdf, fastlio, frontend = configure(args)
-    from robot_mapping_gdk.recording import ReplaySource
+    urdf, fastlio, frontend, scan_preprocessing = configure(args.backend)
+    from robot_mapping_gdk.replay import ReplaySource
 
     from robot_mapping.config import settings_from_profile
     from robot_mapping.runtime.calibration import calibration
@@ -90,11 +55,13 @@ def main():
     source.open()
     profile = source.manifest["configuration"]
     settings = settings_from_profile(profile, args.recording / "configuration.json")
-    if not settings.needs_back or settings.body_filter_mode != "urdf":
+    if not settings.lio.needs_back or settings.body_filter.mode != "urdf":
         raise ValueError("benchmark requires a dual-LiDAR recording with URDF filtering")
     extrinsics, _ = calibration(profile, settings)
     body = urdf.UrdfBodyFilter(
-        settings.body_urdf_file, settings.body_package_path, settings.body_collision_threshold
+        settings.body_filter.urdf_file,
+        settings.body_filter.package_path,
+        settings.body_filter.collision_threshold,
     )
     pipeline = frontend.MappingFrontend(
         source, settings, lidar_extrinsics=extrinsics, body_filter=body, body_lookup=source.lookup
@@ -106,25 +73,11 @@ def main():
     for _ in indices:
         primary = source.next_lidar(0.0)
         frames.append((primary, source.aux_lidar(), source._current))
-    direct_origins = "include_origins" in inspect.signature(fastlio.prepare_scan).parameters
 
     def prepare(scan):
-        if direct_origins:
-            return fastlio.prepare_scan(
-                scan, settings.blind, include_origins=settings.grid_ray_clearing
-            )
-        native = fastlio.prepare_scan(scan, settings.blind)
-        if settings.grid_ray_clearing:
-            native = replace(
-                native,
-                points_array=np.column_stack(
-                    (
-                        native.points_array,
-                        np.zeros((len(native.points_array), 3), dtype=native.points_array.dtype),
-                    )
-                ),
-            )
-        return native
+        return fastlio.prepare_scan(
+            scan, settings.lio.blind, include_origins=settings.grid.ray_clearing
+        )
 
     rows, evidence, counts = [], [], []
     for rep in range(args.repeats):
@@ -136,14 +89,14 @@ def main():
             prepared = time.perf_counter()
             front, removed = pipeline._filter_scan(
                 front,
-                settings.primary_lidar,
+                settings.lio.primary_lidar,
                 primary.begin_ns,
-                extrinsics[settings.primary_lidar][:3, :3],
-                extrinsics[settings.primary_lidar][:3, 3],
+                extrinsics[settings.lio.primary_lidar][:3, :3],
+                extrinsics[settings.lio.primary_lidar][:3, 3],
             )
             if (
                 back is not None
-                and abs(back.frame_stamp - front.frame_stamp) <= settings.max_back_dt
+                and abs(back.frame_stamp - front.frame_stamp) <= settings.lio.max_back_dt
             ):
                 back, back_removed = pipeline._filter_scan(
                     back,
@@ -158,7 +111,7 @@ def main():
             filtered = time.perf_counter()
             kept = 0
             if back is not None:
-                front, _, kept = frontend.merge_back_into_front(
+                front, _, kept = scan_preprocessing.merge_back_into_front(
                     front,
                     back,
                     rotation_front=extrinsics["front"][:3, :3],
@@ -166,7 +119,7 @@ def main():
                     rotation_back=extrinsics["back"][:3, :3],
                     translation_back=extrinsics["back"][:3, 3],
                     body_box=None,
-                    max_scan_duration_s=settings.max_scan_duration,
+                    max_scan_duration_s=settings.lio.max_scan_duration,
                 )
             end = time.perf_counter()
             rows.append(

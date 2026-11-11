@@ -47,27 +47,27 @@ def prepare_scan(scan: LidarScan, blind: float, *, include_origins: bool = False
 def create_backend(settings, imu_from_lidar):
     from .capabilities import load_fastlio2
 
-    fastlio2 = load_fastlio2(require_rays=settings.grid_ray_clearing)
+    fastlio2 = load_fastlio2(require_rays=settings.grid.ray_clearing)
 
     mapping = {
         "scan_match_stride": 1,
         "map_add_stride": 1,
-        "match_distance": settings.match_distance,
-        "match_iterations": settings.match_iterations,
-        "cube_side_length": settings.cube_side_length,
-        "det_range": settings.det_range,
-        "filter_size_surf": settings.filter_size_surf,
-        "filter_size_map": settings.filter_size_map,
-        "plane_fit_mode": settings.plane_fit_mode,
+        "match_distance": settings.lio.match_distance,
+        "match_iterations": settings.lio.match_iterations,
+        "cube_side_length": settings.lio.cube_side_length,
+        "det_range": settings.lio.det_range,
+        "filter_size_surf": settings.lio.filter_size_surf,
+        "filter_size_map": settings.lio.filter_size_map,
+        "plane_fit_mode": settings.lio.plane_fit_mode,
         "extrinsic_est_en": False,
         "export_scan_points": True,
-        "export_grid_rays": settings.grid_ray_clearing,
+        "export_grid_rays": settings.grid.ray_clearing,
     }
     config = fastlio2.FastLIO2Config(
-        blind=settings.blind,
+        blind=settings.lio.blind,
         point_filter_num=1,
         build_point_list=False,
-        max_scan_duration_s=settings.max_scan_duration,
+        max_scan_duration_s=settings.lio.max_scan_duration,
         extrinsic_T=tuple(imu_from_lidar[:3, 3]),
         extrinsic_R=tuple(imu_from_lidar[:3, :3].ravel()),
         mapping=mapping,

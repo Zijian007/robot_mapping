@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 dependencies = ["numpy>=1.26.4,<3"]
 
 [project.optional-dependencies]
-loop = ["numpy==1.26.4", "scipy>=1.10,<1.16", "gtsam==4.2.2"]
+loop = ["scipy>=1.10,<1.16", "gtsam==4.2.2+numpy2.1"]
 test = ["pytest>=8"]
 dev = ["pytest>=8", "ruff==0.17.3"]
 runtime = ["PyYAML>=6,<7"]

@@ -10,7 +10,8 @@ from robot_mapping.backends.capabilities import gtsam_available, pygicp_availabl
 from robot_mapping.backends.loop_closure import AsyncLoopWorker
 from robot_mapping.backends.loop_types import LoopConfig, LoopSnapshot
 from robot_mapping.backends.pose_graph import PoseGraphBackend, PoseGraphNoise
-from robot_mapping.core.online_map import OnlineMap, SE3Pose
+from robot_mapping.core.map_types import SE3Pose
+from robot_mapping.core.online_map import OnlineMap
 from robot_mapping.core.pose_math import gravity_aligned_frame, transform_points
 
 requires_gtsam = pytest.mark.skipif(not gtsam_available(), reason="validated GTSAM unavailable")
@@ -281,15 +282,17 @@ def test_map_rebuild_does_not_hold_ingress_or_snapshot_lock(monkeypatch):
     for x in (0.0, 1.0):
         om.ingest_local_points(pose(x), cloud())
     entered, release, read_ok = threading.Event(), threading.Event(), threading.Event()
-    original = om._project
+    from robot_mapping.core import online_map
 
-    def project(voxels, grid, points, matrix, tracking_from_footprint, rays=None):
+    original = online_map.project_observation
+
+    def project(voxels, grid, points, matrix, tracking_from_footprint, rays=None, **options):
         if threading.current_thread().name == "test_rebuild" and not entered.is_set():
             entered.set()
             assert release.wait(3)
-        return original(voxels, grid, points, matrix, tracking_from_footprint, rays)
+        return original(voxels, grid, points, matrix, tracking_from_footprint, rays, **options)
 
-    monkeypatch.setattr(om, "_project", project)
+    monkeypatch.setattr(online_map, "project_observation", project)
     results, errors = [], []
 
     def optimize():
@@ -386,9 +389,13 @@ def test_persistent_registration_loads_native_binding_once(monkeypatch):
 
 
 @requires_gtsam
-def test_ray_evidence_rebuild_matches_online_and_does_not_clean_3d():
+@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected"])
+def test_ray_evidence_rebuild_matches_online_and_does_not_clean_3d(free_space_mode):
     om = OnlineMap(
         ray_clearing=True,
+        free_space_mode=free_space_mode,
+        projected_min_observations=4,
+        projected_max_range=3.0,
         keyframe_dist_th=0.0,
         min_height=0.0,
         max_height=2.0,
@@ -398,14 +405,18 @@ def test_ray_evidence_rebuild_matches_online_and_does_not_clean_3d():
         om.ingest_local_points(pose(), [[x, 0, 0.5]], rays=[[0, 0, 0.5, x, 0, 0.5]])
     before, spec = om.snapshot_grid()
     scores = om.grid._scores.copy()
+    counts = None if om.grid._projected_counts is None else om.grid._projected_counts.copy()
     points = om.voxels.points_array().copy()
     assert accept_test_loop(om, 0, 6, np.eye(4))
     np.testing.assert_array_equal(om.snapshot_grid()[0], before)
     np.testing.assert_array_equal(om.grid._scores, scores)
+    if counts is not None:
+        np.testing.assert_array_equal(om.grid._projected_counts, counts)
     np.testing.assert_array_equal(om.voxels.points_array(), points)
     assert len(points) == 2  # the 3D person voxel is deliberately unchanged
     om.start_mapping()
     assert om.keyframe_count() == 0 and om.grid._scores is None
+    assert om.grid._projected_counts is None
 
 
 @requires_gtsam
@@ -426,7 +437,9 @@ def test_loop_rebuild_catches_up_grid_only_observations(monkeypatch, voxel_clear
         pose(1.0), [[1.025, 0.075, 0.525]], rays=[[0, 0.075, 0.525, 1.025, 0.075, 0.525]], stamp=1.0
     )
     entered, release = threading.Event(), threading.Event()
-    project = mapping._project_grid
+    from robot_mapping.core import map_projection
+
+    project = map_projection.project_grid_rays
 
     def delayed(grid, rays, matrix, footprint):
         if threading.current_thread().name == "grid-rebuild" and not entered.is_set():
@@ -434,7 +447,7 @@ def test_loop_rebuild_catches_up_grid_only_observations(monkeypatch, voxel_clear
             assert release.wait(3.0)
         return project(grid, rays, matrix, footprint)
 
-    monkeypatch.setattr(mapping, "_project_grid", delayed)
+    monkeypatch.setattr(map_projection, "project_grid_rays", delayed)
     results = []
     relative = np.eye(4)
     relative[0, 3] = 1.0
@@ -471,7 +484,12 @@ def test_loop_rebuild_catches_up_grid_only_observations(monkeypatch, voxel_clear
 @requires_gtsam
 def test_3d_rebuild_replays_insertions_and_clearing_in_time_order():
     mapping = OnlineMap(
-        ray_clearing=True, voxel_clearing=True, keyframe_dist_th=0.0, pose_graph=PoseGraphBackend()
+        ray_clearing=True,
+        voxel_clearing=True,
+        keyframe_dist_th=0.0,
+        pose_graph=PoseGraphBackend(),
+        max_rays=8192,
+        voxel_max_rays=2048,
     )
     for stamp, x in enumerate([2.025, 4.125, 4.125, 4.125, 2.025]):
         mapping.ingest_local_points(
@@ -482,6 +500,7 @@ def test_3d_rebuild_replays_insertions_and_clearing_in_time_order():
     assert len(expected) == 2  # the final keyframe restores the old location
     assert accept_test_loop(mapping, 0, 4, np.eye(4))
     assert mapping.voxels._cells == expected
+    assert mapping.grid.max_rays == 8192 and mapping.voxels.max_rays == 2048
     assert mapping.stats().removed_voxels == 1
     np.testing.assert_allclose(mapping.keyframe_local_points(0), [[2.025, 0.075, 0.525]])
     mapping.start_mapping()
