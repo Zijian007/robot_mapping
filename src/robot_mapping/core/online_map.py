@@ -309,7 +309,9 @@ class OnlineMap:
             return MapSnapshot(
                 self._generation,
                 self._version,
-                self.voxels.points_array(),
+                # Saved geometry is the measured surface, not voxel centers (see
+                # WorldVoxelHash.surface_points_array).
+                self.voxels.surface_points_array(),
                 self.snapshot_grid(),
                 self._map_from_lio.copy(),
                 self._tracking_from_footprint.copy(),

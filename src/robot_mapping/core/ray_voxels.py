@@ -138,6 +138,7 @@ class RayVoxelHash(WorldVoxelHash):
             if count >= self.clear_observations:
                 self._cells.remove(key)
                 self._misses.pop(key, None)
+                self._python_sums.pop(key, None)  # A cleared voxel forgets its old surface.
                 self._python_removed += 1
             else:
                 self._misses[key] = count

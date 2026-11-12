@@ -22,6 +22,8 @@ class WorldVoxelHash:
         self._inv = 1.0 / self.resolution
         self._native_store = kernels.VoxelStore(self.resolution) if kernels is not None else None
         self._python_cells: set[tuple[int, int, int]] = set()
+        # Reference path: per-voxel running sum of inserted points (x, y, z, count).
+        self._python_sums: dict[tuple[int, int, int], list[float]] = {}
 
     @property
     def _cells(self):
@@ -35,6 +37,7 @@ class WorldVoxelHash:
             self._native_store.clear()
         else:
             self._python_cells.clear()
+            self._python_sums.clear()
 
     def __len__(self) -> int:
         return (
@@ -62,6 +65,11 @@ class WorldVoxelHash:
         half = 0.5 * self.resolution
         for i in range(keys.shape[0]):
             key = (int(keys[i, 0]), int(keys[i, 1]), int(keys[i, 2]))
+            total = self._python_sums.setdefault(key, [0.0, 0.0, 0.0, 0.0])
+            total[0] += float(arr[i, 0])
+            total[1] += float(arr[i, 1])
+            total[2] += float(arr[i, 2])
+            total[3] += 1.0
             if key in self._cells:
                 continue
             self._cells.add(key)
@@ -88,6 +96,27 @@ class WorldVoxelHash:
         ).reshape((-1, 3))
         centers = (keys.astype(np.float64) + 0.5) * self.resolution
         return centers.astype(np.float32)
+
+    def surface_points_array(self) -> np.ndarray:
+        """Mean of the measured points in each stored voxel, float32 (N,3).
+
+        ``points_array`` returns voxel centers, which snap every surface to the voxel
+        grid. A map saved that way biases registration by a fraction of a voxel; the
+        per-voxel mean keeps the surface where it was measured. A voxel without
+        recorded points falls back to its center.
+        """
+        if self._native_store is not None:
+            return self._native_store.surface_points_array()
+        if not self._cells:
+            return np.empty((0, 3), dtype=np.float32)
+        points = np.empty((len(self._cells), 3), dtype=np.float64)
+        for row, key in enumerate(self._cells):
+            total = self._python_sums.get(key)
+            if total is not None and total[3] > 0:
+                points[row] = (total[0] / total[3], total[1] / total[3], total[2] / total[3])
+            else:
+                points[row] = [(component + 0.5) * self.resolution for component in key]
+        return points.astype(np.float32)
 
 
 class GrowingOccupancy2D:

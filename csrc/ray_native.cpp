@@ -213,6 +213,9 @@ py::tuple voxel_evidence(Floats rays, Floats selected, Floats lengths, VoxelInde
 struct VoxelStore : VoxelIndex {
   const double resolution, inv;
   std::unordered_map<Key, I, Hash> misses;
+  // Running sum of every inserted point per stored voxel (x, y, z, count). The cell set
+  // stays the occupancy/clearing index; this keeps where the measured surface actually is.
+  std::unordered_map<Key, std::array<double, 4>, Hash> sums;
   I removed = 0;
 
   explicit VoxelStore(double value) : resolution(value), inv(1. / value) {
@@ -249,10 +252,17 @@ struct VoxelStore : VoxelIndex {
         keys.push_back({floor_index(data(i, 0) * inv), floor_index(data(i, 1) * inv),
                         floor_index(data(i, 2) * inv)});
       std::lock_guard<std::mutex> lock(mutex);
-      for (const auto& key : keys) {
+      for (std::size_t i = 0; i < keys.size(); ++i) {
+        const auto& key = keys[i];
         if (cells.insert(key).second)
           added.push_back(key);
         misses.erase(key); // Every new observation is positive evidence.
+        auto& sum = sums[key];
+        const auto row = static_cast<py::ssize_t>(i);
+        sum[0] += data(row, 0);
+        sum[1] += data(row, 1);
+        sum[2] += data(row, 2);
+        sum[3] += 1.0;
       }
     }
     return centers(added, true);
@@ -268,6 +278,33 @@ struct VoxelStore : VoxelIndex {
   }
   py::array_t<float> points_array() {
     return centers(snapshot(), false);
+  }
+  // Mean of the measured points in each stored voxel. Voxel centers quantize every surface
+  // to the grid, which biases registration against the saved map by a fraction of a voxel.
+  py::array_t<float> surface_points_array() {
+    std::vector<std::array<double, 3>> points;
+    {
+      py::gil_scoped_release release;
+      std::lock_guard<std::mutex> lock(mutex);
+      points.reserve(cells.size());
+      for (const auto& key : cells) {
+        const auto found = sums.find(key);
+        if (found != sums.end() && found->second[3] > 0) {
+          const auto& sum = found->second;
+          points.push_back({sum[0] / sum[3], sum[1] / sum[3], sum[2] / sum[3]});
+        } else {
+          points.push_back({(static_cast<double>(key[0]) + .5) * resolution,
+                            (static_cast<double>(key[1]) + .5) * resolution,
+                            (static_cast<double>(key[2]) + .5) * resolution});
+        }
+      }
+    }
+    py::array_t<float> result({static_cast<py::ssize_t>(points.size()), py::ssize_t(3)});
+    auto out = result.mutable_unchecked<2>();
+    for (std::size_t i = 0; i < points.size(); ++i)
+      for (int j = 0; j < 3; ++j)
+        out(static_cast<py::ssize_t>(i), j) = static_cast<float>(points[i][j]);
+    return result;
   }
   py::dict miss_snapshot() {
     std::vector<std::pair<Key, I>> values;
@@ -296,6 +333,7 @@ struct VoxelStore : VoxelIndex {
     std::lock_guard<std::mutex> lock(mutex);
     cells.clear();
     misses.clear();
+    sums.clear();
     removed = 0;
   }
   void ingest_rays(Floats rays, Floats selected, Floats lengths, double max_range, I threshold) {
@@ -316,6 +354,7 @@ struct VoxelStore : VoxelIndex {
       if (++count >= threshold) {
         cells.erase(key);
         misses.erase(key);
+        sums.erase(key); // A cleared voxel forgets its old surface.
         ++removed;
       }
     }
@@ -393,6 +432,7 @@ PYBIND11_MODULE(_ray_native, m) {
       .def(py::init<double>())
       .def("add_points", &VoxelStore::add_points)
       .def("points_array", &VoxelStore::points_array)
+      .def("surface_points_array", &VoxelStore::surface_points_array)
       .def("keys", &VoxelStore::keys)
       .def("misses", &VoxelStore::miss_snapshot)
       .def_property_readonly("size", &VoxelStore::size)
