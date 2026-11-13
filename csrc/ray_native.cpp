@@ -365,16 +365,25 @@ I floor_div(I a, I b) {
   I q = a / b;
   return q - ((a % b) < 0);
 }
-py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_height,
-                              double height_resolution, I depth, I width, I height) {
+// Fraction of a beam that may add miss evidence: the last `margin` metres before a
+// measured return are skipped. Beams clipped at max_range end on no surface.
+double free_until(double distance, double max_range, double margin) {
+  if (distance > max_range || margin <= 0)
+    return 1.0;
+  return 1.0 - margin / distance;
+}
+py::array_t<I> grid_free_keys(Ints rc, Floats z, Floats until, double min_height,
+                              double max_height, double height_resolution, I depth, I width,
+                              I height) {
   if (rc.ndim() != 2 || rc.shape(1) != 4 || z.ndim() != 2 || z.shape(1) != 2 ||
-      z.shape(0) != rc.shape(0) || !std::isfinite(min_height) || !std::isfinite(max_height) ||
+      z.shape(0) != rc.shape(0) || until.ndim() != 1 || until.shape(0) != rc.shape(0) || !std::isfinite(min_height) || !std::isfinite(max_height) ||
       max_height < min_height || !std::isfinite(height_resolution) || height_resolution <= 0 ||
       depth <= 0 || width <= 0 || height <= 0 ||
       width > std::numeric_limits<I>::max() / height / depth)
     throw std::invalid_argument("invalid grid ray kernel arguments");
   auto coords = rc.unchecked<2>();
   auto heights = z.unchecked<2>();
+  auto limit = until.unchecked<1>();
   std::vector<I> keys;
   {
     py::gil_scoped_release release;
@@ -392,6 +401,8 @@ py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_h
       const I dr = coords(i, 2) - coords(i, 0), dc = coords(i, 3) - coords(i, 1);
       const I steps = std::max(std::abs(dr), std::abs(dc));
       for (I k = 1; k < steps; ++k) {
+        if (double(k) / double(steps) >= limit(i))
+          break;
         const I row = coords(i, 0) + floor_div(k * dr + steps / 2, steps);
         const I col = coords(i, 1) + floor_div(k * dc + steps / 2, steps);
         const double altitude =
@@ -418,11 +429,12 @@ py::array_t<I> grid_free_keys(Ints rc, Floats z, double min_height, double max_h
 }
 
 #include "grid_update.hpp"
+#include "polar_update.hpp"
 #include "point_preprocess.hpp"
 
 PYBIND11_MODULE(_ray_native, m) {
   m.doc() = "GIL-free ray kernels and persistent voxel storage";
-  m.attr("API_VERSION") = 8;
+  m.attr("API_VERSION") = 10;
   py::class_<VoxelIndex>(m, "VoxelIndex")
       .def(py::init<>())
       .def("add", [](VoxelIndex& index, Ints keys) { index.change(keys, true); })
@@ -441,6 +453,7 @@ PYBIND11_MODULE(_ray_native, m) {
       .def("clear", &VoxelStore::clear);
   m.def("voxel_evidence", &voxel_evidence);
   m.def("grid_free_keys", &grid_free_keys);
+  m.def("polar_update", &polar_update);
   m.def("select_grouped", &select_grouped);
   m.def("rigid_structure_valid", &rigid_structure_valid);
   m.def("rigid_gram_valid", &rigid_gram_valid);
@@ -461,5 +474,6 @@ PYBIND11_MODULE(_ray_native, m) {
         py::arg("projected_counts").noconvert() = py::none(),
         py::arg("projected_min_observations") = 2, py::arg("projected_max_range") = py::none(),
         py::arg("score_hit") = 2, py::arg("score_miss") = 1, py::arg("score_min") = -4,
-        py::arg("score_max") = 8, py::arg("score_occupied") = 3);
+        py::arg("score_max") = 8, py::arg("score_occupied") = 3,
+        py::arg("free_end_margin") = 0.0);
 }

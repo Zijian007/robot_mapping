@@ -44,6 +44,7 @@ class MappingFrontend:
         imu_frame_id: str = "imu",
         lio: LioBackend | None = None,
         initialize_map: Callable[[np.ndarray, int], bool] | None = None,
+        drop_stale_map_updates: bool = False,
     ) -> None:
         self._extrinsics = {
             k: np.array(v, dtype=np.float64, copy=True) for k, v in lidar_extrinsics.items()
@@ -78,6 +79,10 @@ class MappingFrontend:
 
         self.timings = FrameTimings()
         self._frame_times = {}
+        # Map ingestion runs on its own thread (runtime.map_ingest). Live sources
+        # drop stale pending updates so LIO never waits for the map.
+        self._drop_stale_map_updates = bool(drop_stale_map_updates)
+        self.map_worker = None
 
     def _read_scan(self, timeout: float) -> FrontendScan | None:
         scan = self._source.next_lidar(timeout)
@@ -192,7 +197,34 @@ class MappingFrontend:
                 self.keyframe_count = 0
                 self.consecutive_match_failures = 0
 
+    def _count_keyframe(self) -> None:
+        self.keyframe_count += 1
+
     def run(self, stop_evt: threading.Event) -> None:
+        from .map_ingest import MapIngestWorker
+
+        worker = None
+        if self._online_map is not None:
+            worker = MapIngestWorker(
+                self._online_map,
+                drop_stale=self._drop_stale_map_updates,
+                on_keyframe=self._count_keyframe,
+            )
+            worker.start()
+        self.map_worker = worker
+        try:
+            self._run_loop(stop_evt)
+        except BaseException:
+            if worker is not None:
+                try:
+                    worker.stop()
+                except BaseException:
+                    pass  # the acquisition error is reported; the worker's is secondary
+            raise
+        if worker is not None:
+            worker.stop()  # ingests what is pending; raises the worker's error
+
+    def _run_loop(self, stop_evt: threading.Event) -> None:
         settings = self._settings
         lio = self._lio
         source = self._source
@@ -237,6 +269,8 @@ class MappingFrontend:
         )
 
         while not stop_evt.is_set():
+            if self.map_worker is not None:
+                self.map_worker.check()
             if reset_serial != self._reset_serial:
                 if self._flush_pending:
                     self._flush_source()
@@ -440,12 +474,10 @@ class MappingFrontend:
                         )
                     if not map_alignment_ready:
                         continue
-                map_start = time.monotonic()
-                keyframe = self._online_map.ingest_odom(odom, generation=generation)
-                self._frame_times["map_ms"] = (time.monotonic() - map_start) * 1000.0
-                self._frame_times.update(self._online_map.projection_timings)
-                if keyframe:
-                    self.keyframe_count += 1
+                # Keyframes are decided by the worker; map/grid/voxel times in the
+                # frame report are those of the most recent completed map update.
+                self.map_worker.submit(odom, generation)
+                self._frame_times.update(self.map_worker.last_ms)
 
             self._report_frame(
                 odom,
@@ -488,6 +520,8 @@ class MappingFrontend:
                 f"ingest_ms={self._frame_times['map_ms']:.1f}"
             )
             online_bits += f", loops={st.loops}"
+            if self.map_worker is not None:
+                online_bits += f", map_dropped={self.map_worker.dropped}"
             if self._online_map.loop_error:
                 online_bits += f", loop_error={self._online_map.loop_error}"
         print(

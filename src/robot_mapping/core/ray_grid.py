@@ -22,6 +22,8 @@ from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN
 from .spatial import GrowingOccupancy2D
 
 FREE_SPACE_MODES = ("height_complete", "projected", "polar")
+# Clearing rays: nearest return per (origin, 1-degree azimuth, elevation bin).
+ELEVATION_BIN_DEG = 2
 PLANAR_MODES = ("projected", "polar")
 SCORE_RULES = ("score_hit", "score_miss", "score_max", "score_min", "score_occupied")
 
@@ -63,6 +65,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
         projected_max_range=None,
         polar_bins=180,
         polar_closest_margin=0.2,
+        free_end_margin=0.0,
         score_hit=2,
         score_miss=1,
         score_max=8,
@@ -113,6 +116,9 @@ class RayOccupancy2D(GrowingOccupancy2D):
         if not np.isfinite(polar_closest_margin) or polar_closest_margin < 0:
             raise ValueError("polar_closest_margin must be finite and nonnegative")
         self.polar_closest_margin = float(polar_closest_margin)
+        if not np.isfinite(free_end_margin) or not 0 <= free_end_margin <= 1.0:
+            raise ValueError("free_end_margin must be in [0, 1] m")
+        self.free_end_margin = float(free_end_margin)
         self._projected_counts = None
         self._scores = None
         self._last_footprint_xy = None
@@ -240,17 +246,29 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 rays[cut, :3]
                 + (rays[cut, 3:] - rays[cut, :3]) * (limit[cut] / planar[cut])[:, None]
             )
-        # Rays sharing an origin cell and an endpoint cell rasterize identically.
-        r0, c0 = self._world_to_rc(rays[:, 0], rays[:, 1])
-        r1, c1 = self._world_to_rc(rays[:, 3], rays[:, 4])
-        cell_key = (np.asarray(r0, np.int64) * self._width + c0) * (self._height * self._width) + (
-            np.asarray(r1, np.int64) * self._width + c1
-        )
-        _, first = np.unique(cell_key, return_index=True)
-        return rays[np.sort(first)]
+        return rays
 
     def _polar_update(self, rays, distances):
         """Add planar evidence along polar rays and mark newly qualified columns free."""
+        if kernels is not None:
+            kernels.polar_update(
+                rays,
+                distances,
+                self._scores,
+                self._values,
+                self._projected_counts,
+                self._origin_x,
+                self._origin_y,
+                self.resolution,
+                self.min_height,
+                self.max_height,
+                self.max_ray_range,
+                self.projected_max_range,
+                self.projected_min_observations,
+                self.polar_bins,
+                self.polar_closest_margin,
+            )
+            return
         depth = self._scores.shape[2]
         counts = self._projected_counts.reshape(-1)
         scores = self._scores.reshape(-1, depth)
@@ -363,20 +381,28 @@ class RayOccupancy2D(GrowingOccupancy2D):
         if kernels is not None:
             chosen = kernels.select_grouped(groups, distances)
         else:
-            origins, azimuth, layer = groups[:, :3], groups[:, 3], groups[:, 4]
+            origins, azimuth, elevation = groups[:, :3], groups[:, 3], groups[:, 4]
             origin_order = np.lexsort((origins[:, 2], origins[:, 1], origins[:, 0]))
             ordered_origins = origins[origin_order]
             boundaries = np.r_[True, (ordered_origins[1:] != ordered_origins[:-1]).any(axis=1)]
             sensors = np.empty(len(rays), dtype=np.int64)
             sensors[origin_order] = np.cumsum(boundaries) - 1
-            key = (sensors * 360 + azimuth) * (self._scores.shape[2] + 2) + layer + 1
+            bins = 180 // ELEVATION_BIN_DEG + 2  # floor(-90/bin) .. floor(90/bin)
+            key = (sensors * 360 + azimuth) * bins + elevation + bins // 2
             order = np.lexsort((distances, key))
             chosen = order[np.r_[True, np.diff(key[order]) != 0]]
         if len(chosen) > self.max_rays:
             chosen = chosen[np.linspace(0, len(chosen) - 1, self.max_rays, dtype=int)]
         return rays[chosen]
 
+    def _free_until(self, lengths):
+        """Fraction of each beam that may add miss evidence (same formula as the kernel)."""
+        if self.free_end_margin <= 0:
+            return np.ones(len(lengths))
+        return np.where(lengths > self.max_ray_range, 1.0, 1.0 - self.free_end_margin / lengths)
+
     def _free_keys(self, rays):
+        until = self._free_until(np.linalg.norm(rays[:, 3:] - rays[:, :3], axis=1))
         if kernels is not None:
             origin, endpoint = rays[:, :3], rays[:, 3:]
             delta = endpoint - origin
@@ -389,6 +415,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
             return kernels.grid_free_keys(
                 np.column_stack((r0, c0, r1, c1)),
                 np.column_stack((origin[:, 2], endpoint[:, 2])),
+                until,
                 self.min_height,
                 self.max_height,
                 self.height_resolution,
@@ -401,6 +428,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
         # Bound temporary matrices; vectorize the ray traversal within each batch.
         for start in range(0, len(rays), 128):
             batch = rays[start : start + 128]
+            batch_until = until[start : start + 128]
             origin, endpoint = batch[:, :3], batch[:, 3:]
             delta = endpoint - origin
             scale = np.minimum(
@@ -424,6 +452,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
             )
             valid = (
                 (k < steps[:, None])
+                & (k / n < batch_until[:, None])
                 & (z >= self.min_height)
                 & (z <= self.max_height)
                 & (rows >= 0)
@@ -441,13 +470,15 @@ class RayOccupancy2D(GrowingOccupancy2D):
         azimuth = (
             np.floor((np.arctan2(delta[:, 1], delta[:, 0]) + np.pi) * 180 / np.pi).astype(int) % 360
         )
-        layer = np.clip(
-            np.floor((rays[:, 5] - self.min_height) / self.height_resolution),
-            -1,
-            self._scores.shape[2],
+        # Elevation bins, not endpoint layers: rays ending on the floor or ceiling
+        # would otherwise collapse into one group per azimuth, and the layers they
+        # cross (low and high parts of a cell) would rarely receive clearing evidence.
+        elevation = np.floor(
+            np.degrees(np.arctan2(delta[:, 2], np.hypot(delta[:, 0], delta[:, 1])))
+            / ELEVATION_BIN_DEG
         ).astype(int)
         origins = np.round(rays[:, :3] / 0.25)
-        return np.column_stack((origins, azimuth, layer)).astype(np.int64)
+        return np.column_stack((origins, azimuth, elevation)).astype(np.int64)
 
     def ingest_rays(self, rays, robot_xy=None):
         if self.free_space_mode != "polar":
@@ -512,6 +543,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 self.score_min,
                 self.score_max,
                 self.score_occupied,
+                self.free_end_margin,
             )
             self._last_footprint_xy = None if robot_xy is None else tuple(robot_xy)
             return rays, distances

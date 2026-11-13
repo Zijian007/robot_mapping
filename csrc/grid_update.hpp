@@ -10,6 +10,8 @@ using Footprint = std::optional<std::array<double, 2>>;
 struct GridRay {
   I row0, col0, row1, col1;
   double z0, z1, length;
+  // Samples at or beyond this fraction of the beam add no miss evidence (end margin).
+  double free_until;
   bool planar;
 };
 
@@ -26,7 +28,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
                  double free_radius, Footprint previous, Footprint current,
                  std::optional<Scores> projected_counts, I projected_min_observations,
                  std::optional<double> projected_max_range, int score_hit, int score_miss,
-                 int score_min, int score_max, int score_occupied) {
+                 int score_min, int score_max, int score_occupied, double free_end_margin) {
   const double planar_range = projected_max_range.value_or(max_range);
   if (!std::isfinite(planar_range) || planar_range <= 0 || projected_min_observations < 1 ||
       projected_min_observations > 127)
@@ -43,9 +45,11 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
       !values.writeable())
     throw std::invalid_argument("invalid grid update buffers");
   for (double value : {origin_x, origin_y, resolution, min_height, max_height, height_resolution,
-                       max_range, free_radius})
+                       max_range, free_radius, free_end_margin})
     if (!std::isfinite(value))
       throw std::invalid_argument("nonfinite grid configuration");
+  if (free_end_margin < 0)
+    throw std::invalid_argument("free_end_margin must be nonnegative");
   if (resolution <= 0 || height_resolution <= 0 || max_height < min_height || max_range <= 0 ||
       max_rays < 1)
     throw std::invalid_argument("invalid grid update configuration");
@@ -112,7 +116,7 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
                      grid_coordinate((r(i, 0) - origin_x) / resolution),
                      grid_coordinate((y - origin_y) / resolution),
                      grid_coordinate((x - origin_x) / resolution), r(i, 2), z,
-                     std::min(d(i), max_range),
+                     std::min(d(i), max_range), free_until(d(i), max_range, free_end_margin),
                      r(i, 2) >= min_height && r(i, 2) <= max_height && r(i, 5) >= min_height &&
                          r(i, 5) <= max_height});
   }
@@ -146,6 +150,8 @@ void grid_update(Floats rays, Floats distances, Ints groups, Scores scores, Grid
     const I dr = beam.row1 - beam.row0, dc = beam.col1 - beam.col0;
     const I steps = std::max(std::abs(dr), std::abs(dc));
     for (I k = 1; k < steps; ++k) {
+      if (double(k) / double(steps) >= beam.free_until)
+        break;
       const I row = beam.row0 + floor_div(k * dr + steps / 2, steps);
       const I col = beam.col0 + floor_div(k * dc + steps / 2, steps);
       const double altitude = beam.z0 + (double(k) / double(steps)) * (beam.z1 - beam.z0);

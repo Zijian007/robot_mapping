@@ -83,7 +83,11 @@ def test_native_protection_resets_and_deletes_like_reference(monkeypatch):
 def test_native_rejects_invalid_shapes():
     with pytest.raises(ValueError):
         kernels.grid_free_keys(
-            np.zeros((1, 3), dtype=np.int64), np.zeros((1, 2)), 0.0, 1.0, 0.2, 5, 10, 10
+            np.zeros((1, 3), dtype=np.int64), np.zeros((1, 2)), np.ones(1), 0.0, 1.0, 0.2, 5, 10, 10
+        )
+    with pytest.raises(ValueError):  # one end-margin limit per ray
+        kernels.grid_free_keys(
+            np.zeros((1, 4), dtype=np.int64), np.zeros((1, 2)), np.ones(2), 0.0, 1.0, 0.2, 5, 10, 10
         )
     with pytest.raises(ValueError):
         kernels.voxel_evidence(
@@ -200,13 +204,15 @@ def test_native_store_serializes_concurrent_insertion_and_snapshots():
 
 
 @pytest.mark.parametrize("max_rays", [1, 2, 19, 64])
-@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected"])
+@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected", "polar"])
 @pytest.mark.parametrize(
     "grid_params",
     [
         {},
         {"projected_min_observations": 4, "projected_max_range": 1.25},
         {"score_hit": 1, "score_miss": 2, "score_max": 4, "score_min": -2, "score_occupied": 2},
+        {"free_end_margin": 0.4},
+        {"free_end_margin": 1.0, "projected_min_observations": 2},
         # Extremes exercise int8 saturation without overflow in both backends.
         {
             "score_hit": 100,
@@ -264,7 +270,7 @@ def test_fused_grid_matches_reference_with_limits_growth_and_footprints(
         assert pair[0]._last_footprint_xy == pair[1]._last_footprint_xy
         np.testing.assert_array_equal(pair[0]._scores, pair[1]._scores)
         np.testing.assert_array_equal(pair[0].values, pair[1].values)
-        if free_space_mode == "projected":
+        if free_space_mode != "height_complete":
             np.testing.assert_array_equal(pair[0]._projected_counts, pair[1]._projected_counts)
 
 

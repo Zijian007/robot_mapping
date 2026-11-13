@@ -70,6 +70,7 @@ class GridSettings:
     free_space_mode: str
     projected_min_observations: int
     projected_max_range: float
+    free_end_margin: float
     score_hit: int
     score_miss: int
     score_max: int

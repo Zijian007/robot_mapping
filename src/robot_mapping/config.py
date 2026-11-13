@@ -182,6 +182,8 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("grid.projected_min_observations must be an integer in [1, 127]")
     if settings.grid.projected_max_range <= 0:
         raise ValueError("grid.projected_max_range must be positive")
+    if not 0 <= settings.grid.free_end_margin <= 1.0:
+        raise ValueError("grid.free_end_margin must be in [0, 1] m")
     from .core.ray_grid import validate_score_rules
 
     grid = settings.grid

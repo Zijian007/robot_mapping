@@ -58,6 +58,7 @@
     "free_space_mode": "height_complete",
     "projected_min_observations": 2,
     "projected_max_range": 30.0,
+    "free_end_margin": 0.2,
     "score_hit": 2,
     "score_miss": 1,
     "score_max": 8,

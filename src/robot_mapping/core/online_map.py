@@ -60,6 +60,7 @@ class OnlineMap:
         free_space_mode="height_complete",
         projected_min_observations=2,
         projected_max_range=None,
+        free_end_margin=0.0,
         score_hit=2,
         score_miss=1,
         score_max=8,
@@ -112,6 +113,7 @@ class OnlineMap:
                 free_space_mode=free_space_mode,
                 projected_min_observations=projected_min_observations,
                 projected_max_range=projected_max_range,
+                free_end_margin=free_end_margin,
                 score_hit=score_hit,
                 score_miss=score_miss,
                 score_max=score_max,
@@ -155,8 +157,11 @@ class OnlineMap:
 
     @property
     def ingest_token(self):
-        with self._lock:
-            return self._generation if self._phase is MappingPhase.MAPPING else None
+        # Read without _lock: the LIO thread calls this every frame and must not
+        # wait for a projection in progress. A stale value is harmless because
+        # ingest_odom rejects observations from another generation under _lock.
+        phase, generation = self._phase, self._generation
+        return generation if phase is MappingPhase.MAPPING else None
 
     @property
     def phase(self):
