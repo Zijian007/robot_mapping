@@ -5,7 +5,11 @@ an obstacle from erasing it. Evidence is updated once per cell per observation;
 current hits win over free rays in that observation. The default height_complete
 mode requires negative evidence in every height bin. Projected mode maintains
 separate repeated planar visibility evidence with all-height obstacle vetoes.
-Neither mode establishes a continuous swept-volume or floor-support guarantee.
+Polar mode keeps the same planar evidence but, per observation and per angular
+sector around each sensor origin, clears only toward the nearest in-band return
+(vendor Mapping2D style): what lies behind the first obstacle at any height in
+that sector is not cleared by the same observation.
+No mode establishes a continuous swept-volume or floor-support guarantee.
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ from robot_mapping.backends.ray_native import kernels
 from .grid import GDK_FREE, GDK_OCCUPIED, GDK_UNKNOWN
 from .spatial import GrowingOccupancy2D
 
+FREE_SPACE_MODES = ("height_complete", "projected", "polar")
+PLANAR_MODES = ("projected", "polar")
 SCORE_RULES = ("score_hit", "score_miss", "score_max", "score_min", "score_occupied")
 
 
@@ -55,6 +61,8 @@ class RayOccupancy2D(GrowingOccupancy2D):
         free_space_mode="height_complete",
         projected_min_observations=2,
         projected_max_range=None,
+        polar_bins=180,
+        polar_closest_margin=0.2,
         score_hit=2,
         score_miss=1,
         score_max=8,
@@ -80,7 +88,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
         self.height_resolution = float(height_resolution)
         self.max_ray_range = float(max_ray_range)
         self.max_rays = int(max_rays)
-        if free_space_mode not in {"height_complete", "projected"}:
+        if free_space_mode not in FREE_SPACE_MODES:
             raise ValueError("unknown free_space_mode")
         self.free_space_mode = free_space_mode
         if (
@@ -95,6 +103,16 @@ class RayOccupancy2D(GrowingOccupancy2D):
         )
         if not np.isfinite(self.projected_max_range) or self.projected_max_range <= 0:
             raise ValueError("projected_max_range must be finite and positive")
+        if (
+            isinstance(polar_bins, (bool, np.bool_))
+            or not isinstance(polar_bins, (int, np.integer))
+            or not 8 <= polar_bins <= 3600
+        ):
+            raise ValueError("polar_bins must be an integer in [8, 3600]")
+        self.polar_bins = int(polar_bins)
+        if not np.isfinite(polar_closest_margin) or polar_closest_margin < 0:
+            raise ValueError("polar_closest_margin must be finite and nonnegative")
+        self.polar_closest_margin = float(polar_closest_margin)
         self._projected_counts = None
         self._scores = None
         self._last_footprint_xy = None
@@ -112,7 +130,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 1, int(np.ceil((self.max_height - self.min_height) / self.height_resolution))
             )
             self._scores = np.zeros((self._height, self._width, layers), dtype=np.int8)
-            if self.free_space_mode == "projected":
+            if self.free_space_mode in PLANAR_MODES:
                 self._projected_counts = np.zeros((self._height, self._width), dtype=np.int8)
 
     def _expand_to_include(self, xs, ys):
@@ -179,6 +197,130 @@ class RayOccupancy2D(GrowingOccupancy2D):
             counts[seen].astype(np.int16) + 1, self.projected_min_observations
         )
         return np.flatnonzero(seen)
+
+    def _polar_rays(self, rays, distances):
+        """In-band rays cut at the nearest in-band return of their sensor sector.
+
+        Sectors are `polar_bins` equal bearings around each sensor origin
+        (origins grouped like `_ray_groups`). A return within
+        `polar_closest_margin` of the sector's nearest keeps its full length;
+        a farther one is cut to the nearest planar range, because what lies
+        beyond the sector's first obstacle is not observed in the plane.
+        Returned endpoints are never cleared themselves.
+        """
+        band = (
+            (rays[:, 2] >= self.min_height)
+            & (rays[:, 2] <= self.max_height)
+            & (rays[:, 5] >= self.min_height)
+            & (rays[:, 5] <= self.max_height)
+            & (distances <= self.max_ray_range)
+        )
+        planar = np.hypot(rays[:, 3] - rays[:, 0], rays[:, 4] - rays[:, 1])
+        band &= planar > 1e-6
+        rays, planar = rays[band], planar[band]
+        if not len(rays):
+            return rays
+        bearing = np.arctan2(rays[:, 4] - rays[:, 1], rays[:, 3] - rays[:, 0])
+        bins = np.floor((bearing + np.pi) / (2 * np.pi) * self.polar_bins).astype(np.int64)
+        bins %= self.polar_bins
+        # One int64 key per (origin group, sector); 15 bits per origin axis covers +-4 km.
+        origin = np.round(rays[:, :3] / 0.25).astype(np.int64) + (1 << 14)
+        if (origin < 0).any() or (origin >= 1 << 15).any():
+            raise ValueError("ray origin outside the supported +-4 km range")
+        keys = ((origin[:, 0] << 30) | (origin[:, 1] << 15) | origin[:, 2]) * self.polar_bins + bins
+        _, sector = np.unique(keys, return_inverse=True)
+        sector = sector.reshape(-1)
+        nearest = np.full(sector.max() + 1, np.inf)
+        np.minimum.at(nearest, sector, planar)
+        limit = nearest[sector]
+        cut = planar > limit + self.polar_closest_margin
+        if cut.any():
+            rays = rays.copy()
+            rays[cut, 3:] = (
+                rays[cut, :3]
+                + (rays[cut, 3:] - rays[cut, :3]) * (limit[cut] / planar[cut])[:, None]
+            )
+        # Rays sharing an origin cell and an endpoint cell rasterize identically.
+        r0, c0 = self._world_to_rc(rays[:, 0], rays[:, 1])
+        r1, c1 = self._world_to_rc(rays[:, 3], rays[:, 4])
+        cell_key = (np.asarray(r0, np.int64) * self._width + c0) * (self._height * self._width) + (
+            np.asarray(r1, np.int64) * self._width + c1
+        )
+        _, first = np.unique(cell_key, return_index=True)
+        return rays[np.sort(first)]
+
+    def _polar_update(self, rays, distances):
+        """Add planar evidence along polar rays and mark newly qualified columns free."""
+        depth = self._scores.shape[2]
+        counts = self._projected_counts.reshape(-1)
+        scores = self._scores.reshape(-1, depth)
+        hit_columns = np.unique(self._keys(rays[distances <= self.max_ray_range, 3:]) // depth)
+        counts[hit_columns] = 0
+        selected = self._polar_rays(rays, distances)
+        if len(selected):
+            origin, endpoint = selected[:, :2], selected[:, 3:5]
+            planar = np.linalg.norm(endpoint - origin, axis=1)
+            # Rasterize only up to the planar range limit; the endpoint cell is never cleared.
+            scale = np.minimum(1.0, self.projected_max_range / planar)
+            endpoint = origin + (endpoint - origin) * scale[:, None]
+            r0, c0 = (
+                np.asarray(v, np.int64) for v in self._world_to_rc(origin[:, 0], origin[:, 1])
+            )
+            r1, c1 = (
+                np.asarray(v, np.int64) for v in self._world_to_rc(endpoint[:, 0], endpoint[:, 1])
+            )
+            # Obstacle test at any height, evaluated once inside the window the rays cover.
+            top, bottom = (
+                max(0, int(min(r0.min(), r1.min()))),
+                min(self._height, int(max(r0.max(), r1.max())) + 1),
+            )
+            left, right = (
+                max(0, int(min(c0.min(), c1.min()))),
+                min(self._width, int(max(c0.max(), c1.max())) + 1),
+            )
+            window_w = right - left
+            stop_mask = (self._scores[top:bottom, left:right] > 0).any(axis=2)
+            hr, hc = np.divmod(hit_columns, self._width)
+            inside = (hr >= top) & (hr < bottom) & (hc >= left) & (hc < right)
+            # A current hit vetoes even before its score becomes positive.
+            stop_mask[hr[inside] - top, hc[inside] - left] = True
+            stop_mask = stop_mask.reshape(-1)
+            seen = []
+            for begin in range(0, len(selected), 512):
+                part = slice(begin, begin + 512)
+                dr, dc = r1[part] - r0[part], c1[part] - c0[part]
+                steps = np.maximum(np.abs(dr), np.abs(dc))
+                if steps.max() < 2:
+                    continue
+                k = np.arange(1, steps.max(), dtype=np.int64)[None, :]
+                n = np.maximum(steps[:, None], 1)
+                rows = r0[part, None] + (k * dr[:, None] + n // 2) // n
+                cols = c0[part, None] + (k * dc[:, None] + n // 2) // n
+                valid = (
+                    (k < steps[:, None])
+                    & (rows >= top)
+                    & (rows < bottom)
+                    & (cols >= left)
+                    & (cols < right)
+                )
+                local = np.where(valid, (rows - top) * window_w + (cols - left), 0)
+                # Everything from the first known obstacle (any height) onward is occluded.
+                keep = valid & (np.cumsum(valid & stop_mask[local], axis=1) == 0)
+                seen.append(rows[keep] * self._width + cols[keep])
+            if seen:
+                seen = np.unique(np.concatenate(seen))
+                counts[seen] = np.minimum(
+                    counts[seen].astype(np.int16) + 1, self.projected_min_observations
+                )
+        # The height update may have reset earlier planar-free columns anywhere in range.
+        values = self._values.reshape(-1)
+        candidates = np.flatnonzero(
+            (counts >= self.projected_min_observations)
+            & (values != GDK_FREE)
+            & (values != GDK_OCCUPIED)
+        )
+        free = candidates[~(scores[candidates] > 0).any(axis=1)]
+        values[free] = GDK_FREE
 
     def ingest_points(self, xyz, robot_xy=None):
         raise ValueError("ray occupancy requires measured origins and endpoints; use ingest_rays")
@@ -308,6 +450,20 @@ class RayOccupancy2D(GrowingOccupancy2D):
         return np.column_stack((origins, azimuth, layer)).astype(np.int64)
 
     def ingest_rays(self, rays, robot_xy=None):
+        if self.free_space_mode != "polar":
+            return self._ingest_rays(rays, robot_xy)
+        # Polar: height evidence and height-complete free space as usual, then
+        # planar evidence on top. A column is free when either rule holds; both
+        # require that no height layer has positive evidence.
+        prepared = self._ingest_rays(rays, robot_xy)
+        if prepared is not None:
+            self._polar_update(*prepared)
+
+    def _ingest_rays(self, rays, robot_xy=None):
+        """Height evidence and the projected/height-complete value rule.
+
+        Returns the filtered rays and their lengths, or None when nothing was ingested.
+        """
         rays = np.asarray(rays, dtype=np.float64)
         if rays.ndim != 2 or rays.shape[1] != 6 or not np.isfinite(rays).all():
             raise ValueError("rays must be finite (N,6): origin xyz, endpoint xyz")
@@ -328,6 +484,8 @@ class RayOccupancy2D(GrowingOccupancy2D):
         if robot_xy is not None:
             extent = np.vstack((extent, [*robot_xy, 0.0]))
         self._expand_to_include(extent[:, 0], extent[:, 1])
+        # After any growth (padding reallocates). Polar evidence is added by ingest_rays.
+        projected = self._projected_counts if self.free_space_mode == "projected" else None
         if kernels is not None:
             kernels.grid_update(
                 rays,
@@ -346,7 +504,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 self.free_radius_m,
                 self._last_footprint_xy,
                 None if robot_xy is None else tuple(robot_xy),
-                self._projected_counts,
+                projected,
                 self.projected_min_observations,
                 self.projected_max_range,
                 self.score_hit,
@@ -356,7 +514,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
                 self.score_occupied,
             )
             self._last_footprint_xy = None if robot_xy is None else tuple(robot_xy)
-            return
+            return rays, distances
         hits = np.unique(self._keys(rays[distances <= self.max_ray_range, 3:]))
         misses = np.setdiff1d(self._free_keys(self._select_rays(rays)), hits, assume_unique=True)
         scores = self._scores.reshape(-1)
@@ -371,7 +529,7 @@ class RayOccupancy2D(GrowingOccupancy2D):
         # footprint so its temporary unknown->free paint keeps the old semantics.
         depth = self._scores.shape[2]
         columns = [hits // depth, misses // depth]
-        if self._projected_counts is not None:
+        if projected is not None:
             columns.append(self._project_free(rays, hits))
         if self._last_footprint_xy is not None:
             row, col = self._world_to_rc(*np.asarray(self._last_footprint_xy))
@@ -383,16 +541,17 @@ class RayOccupancy2D(GrowingOccupancy2D):
         changed = self._scores.reshape(-1, depth)[columns]
         occupied = (changed >= self.score_occupied).any(axis=1)
         free = (changed < 0).all(axis=1)
-        if self._projected_counts is not None:
-            free = (
-                self._projected_counts.reshape(-1)[columns] >= self.projected_min_observations
-            ) & ~(changed > 0).any(axis=1)
+        if projected is not None:
+            free = (projected.reshape(-1)[columns] >= self.projected_min_observations) & ~(
+                changed > 0
+            ).any(axis=1)
         values = self._values.reshape(-1)
         values[columns] = GDK_UNKNOWN
         values[columns[free]] = GDK_FREE
         values[columns[occupied]] = GDK_OCCUPIED
         if robot_xy is not None:
             self._mark_free_disk(
-                *robot_xy, hit_columns=hits // depth if self._projected_counts is not None else None
+                *robot_xy, hit_columns=hits // depth if projected is not None else None
             )
         self._last_footprint_xy = None if robot_xy is None else tuple(robot_xy)
+        return rays, distances

@@ -392,7 +392,7 @@ def test_persistent_registration_loads_native_binding_once(monkeypatch):
 
 
 @requires_gtsam
-@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected"])
+@pytest.mark.parametrize("free_space_mode", ["height_complete", "projected", "polar"])
 def test_ray_evidence_rebuild_matches_online_and_does_not_clean_3d(free_space_mode):
     om = OnlineMap(
         ray_clearing=True,

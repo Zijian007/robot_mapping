@@ -175,8 +175,8 @@ def validate_settings(settings: MappingSettings) -> None:
         raise ValueError("grid ray parameters must be positive")
     if settings.grid.update_interval_s < 0:
         raise ValueError("grid update_interval_s must be nonnegative")
-    if settings.grid.free_space_mode not in {"height_complete", "projected"}:
-        raise ValueError("grid.free_space_mode must be height_complete or projected")
+    if settings.grid.free_space_mode not in {"height_complete", "projected", "polar"}:
+        raise ValueError("grid.free_space_mode must be height_complete, projected or polar")
     count = settings.grid.projected_min_observations
     if isinstance(count, bool) or not isinstance(count, Integral) or not 1 <= count <= 127:
         raise ValueError("grid.projected_min_observations must be an integer in [1, 127]")
@@ -191,8 +191,8 @@ def validate_settings(settings: MappingSettings) -> None:
         )
     except ValueError as error:
         raise ValueError(f"grid.{error}") from None
-    if settings.grid.free_space_mode == "projected" and not settings.grid.ray_clearing:
-        raise ValueError("projected free space requires grid.ray_clearing")
+    if settings.grid.free_space_mode in {"projected", "polar"} and not settings.grid.ray_clearing:
+        raise ValueError(f"{settings.grid.free_space_mode} free space requires grid.ray_clearing")
     if settings.online.voxel_clearing and not settings.grid.ray_clearing:
         raise ValueError("online.voxel_clearing requires grid.ray_clearing")
     if settings.online.voxel_clear_observations < 2:

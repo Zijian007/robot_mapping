@@ -62,8 +62,58 @@ grid:
 判空距离还受 `grid.max_ray_range` 上限限制。它只限制二维自由次数的新增，不影响远处障碍命中、
 高度层清除证据或三维体素清理。累计次数不是连续帧数或固定秒数，观测不必来自不同位置。
 地图会保留过去已观测的自由格；移动后地图仍可超出当前传感器周围 5 m。
-这两个参数仅在 `projected` 模式生效，脚下临时先验仍由 `online.free_radius_m` 控制。
+这两个参数仅在 `projected` 和 `polar` 模式生效，脚下临时先验仍由 `online.free_radius_m` 控制。
 修改配置后需重新启动建图；不会实时重算正在运行的会话或改写已保存地图。
+
+### 扇区最近障碍（polar）
+
+```yaml
+grid:
+  free_space_mode: polar
+  projected_min_observations: 2
+  projected_max_range: 10.0
+```
+
+同一段 25 s 静止录包（2026-11-13，G2，Mid-360 单雷达，高度 0.07–2.0 m，本机分值规则 miss 2 / max 4，
+96 次观测，二维模式 2 次 / 10 m）离线重投影：
+
+| 模式 | 空闲面积 | 每次观测耗时 |
+|---|---|---|
+| `height_complete` | 8.2 m² | 28 ms |
+| `projected` | 77.6 m² | 32 ms |
+| `polar` | 79.6 m² | 53 ms |
+
+`height_complete` 稀疏的原因是要求 0.07–2.0 m 的 20 个高度层**每层**都被射线穿过，贴地和高处的层很少被穿过。
+两种二维模式在这个场景几乎一致：只有 `projected` 判空的 2.7 m²，只有 `polar` 判空的 4.6 m²
+（主要是 `height_complete` 已确认、但超出 10 m 判空距离的格子）。
+`polar` 的区别在构造上：同一扇区（2°）里越过近处矮障碍打到后墙的射线，一律在矮障碍的距离处截断；
+`projected` 只在射线经过的格子上有命中时才截断，矮障碍只被少数格命中时，相邻射线可能从旁边擦过去清空它后方。
+静止场景里两者差别不明显，需要移动建图后再对比。
+
+做法参照厂商建图的二维栅格生成（每个关键帧按方位分 180 个扇区、取最近障碍、画线清空）：
+
+- 按传感器起点（0.25 m 分组）和水平方位把本次观测分成 `polar_bins` 个扇区（默认 180，即每扇区 2°）。
+  只用起点和回波高度都在配置范围内的回波；地面、天花板回波既不清空也不遮挡。
+- 每个扇区取水平距离最近的回波。距离不超过“最近距离 + `polar_closest_margin`（默认 0.2 m）”的回波整条画线清空；
+  更远的回波截断到最近距离再画线（它沿自己的方位证明了这段为空，但扇区第一个障碍之后的平面没有被观测到）。终点格不清空。
+- 其余规则与 `projected` 相同：次数阈值、判空距离、历史任意高度的正分值和本次命中都会截断射线、
+  新命中重置该列的二维次数、不修改高度层分值。
+- 列空闲的条件是二维次数达标**或**满足 `height_complete`，两者都要求没有任何高度层为正分值。
+- 二维部分是 NumPy 实现（`projected` 和高度层更新走 C++ 扩展），判空距离越大越慢。`polar_bins`、`polar_closest_margin`
+  目前只是 `RayOccupancy2D` 的构造参数，没有放进配置文件。
+- 厂商还对障碍点做 1.0 m 半径、至少 10 个邻居的离群点滤波，这里没有做：本次命中本来就会截断射线，
+  孤立噪点只挡住穿过它那一格的射线。
+
+离线对比三种模式（不连接设备，录包只读）：
+
+```bash
+cd /home/agi/robot_mapping_gdk
+bash scripts/run_g2.sh --record-dir recordings/free-modes --duration-s 25   # 只读传感器，不驱动底盘
+env -u PYTHONPATH PYTHONPATH=src /home/agi/.venv/bin/python \
+  tools/evaluation/compare_free_modes.py recordings/free-modes outputs/free-modes --max-range 10
+```
+
+输出 `free_modes.png`（三种模式并排）、`diff.png`（projected 与 polar 的差异）和 `comparison.json`。
 
 `max_ray_range: 30.0` m 限制 2D 更新范围；`grid.max_rays`（通用默认 2048）限制每个关键帧的
 清空射线数（定时观测使用同一限额），按角度、高度和起点分组选取近处回波，再均匀限额；范围内所有真实回波
