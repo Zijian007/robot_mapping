@@ -146,6 +146,7 @@ class OnlineMap:
         self._last_keyframe_lio_pose = None
         self._map_from_lio = np.eye(4)
         self._tracking_from_footprint = np.eye(4)
+        self._latest_map_from_footprint = None
         self._pose_graph = pose_graph
         self.loop_config = loop_config or LoopConfig(enabled=False)
         self._loop_worker = loop_worker
@@ -226,6 +227,7 @@ class OnlineMap:
         self._last_keyframe_lio_pose = None
         self._map_from_lio = np.eye(4)
         self._tracking_from_footprint = np.eye(4)
+        self._latest_map_from_footprint = None
 
     def set_map_alignment(self, map_from_lio, *, generation=None, tracking_from_footprint=None):
         """Apply caller-selected coordinates and footprint extrinsic.
@@ -459,11 +461,6 @@ class OnlineMap:
                     or stamp - self._last_grid_stamp >= self._grid_update_interval_s
                 )
             )
-            if not keyframe and not timed_update:
-                return False
-            if local_rays is not None:
-                local_rays = local_rays.copy()
-                local_rays.flags.writeable = False
             map_from_tracking = (
                 self._map_from_lio @ lio_from_tracking
                 if not self._optimized_poses
@@ -472,6 +469,13 @@ class OnlineMap:
                     @ relative_se3(self._last_keyframe_lio_pose, lio_from_tracking)
                 )
             )
+            # Every accepted frame, not only grid updates: the live view shows the robot.
+            self._latest_map_from_footprint = map_from_tracking @ self._tracking_from_footprint
+            if not keyframe and not timed_update:
+                return False
+            if local_rays is not None:
+                local_rays = local_rays.copy()
+                local_rays.flags.writeable = False
             if keyframe:
                 node_id = len(self._keyframes)
                 self._keyframes.append(KeyframeRecord(pose, keyframe_points, local_rays))
@@ -684,3 +688,13 @@ class OnlineMap:
             if self.grid.values is None or self.grid.spec is None:
                 return None
             return self.grid.values.copy(), self.grid.spec
+
+    def latest_footprint_pose(self):
+        """map_from_footprint (4x4) of the newest accepted frame, or None before the first one.
+
+        Follows loop corrections the same way grid updates do: relative to the newest
+        optimized keyframe.
+        """
+        with self._lock:
+            pose = self._latest_map_from_footprint
+            return None if pose is None else pose.copy()
